@@ -35,21 +35,29 @@ export type Extras = {
   // Tip is either a percentage of the items subtotal, or a fixed amount.
   tipPercent: number;
   tipFixed: number;
+  // Discount taken off the items subtotal BEFORE tax/service/tip:
+  // "fixed" = discountValue is an amount, "percent" = discountValue is a %.
+  discountType: "fixed" | "percent";
+  discountValue: number;
+  // Receipt prices already contain tax — tax is forced to 0.
+  pricesIncludeTax: boolean;
 };
 
 export type PersonBreakdown = {
   person: Person;
   items: { item: Item; share: number }[]; // share = this person's portion of that item
   subtotal: number; // sum of item shares, before extras
+  discountShare: number; // this person's slice of the discount (amount taken OFF)
   taxShare: number;
   serviceShare: number;
   tipShare: number;
-  total: number; // subtotal + extras shares
+  total: number; // subtotal - discountShare + extras shares
 };
 
 export type SplitResult = {
   people: PersonBreakdown[];
   itemsSubtotal: number;
+  discount: number; // total discount taken off (positive number)
   tax: number;
   service: number;
   tip: number;
@@ -73,8 +81,9 @@ export function roundMoney(value: number, smallestUnit = 1): number {
  * Split a bill.
  *
  * - Each item's line total (price * qty) is divided evenly among its assignees.
- * - Tax / service are computed on the items subtotal and split in proportion
- *   to each person's subtotal.
+ * - The discount (fixed or %) comes off the items subtotal first; tax / service
+ *   are computed on the discounted subtotal and split in proportion to each
+ *   person's subtotal. The discount is split the same proportional way.
  * - Tip is either tipPercent % of the subtotal, or tipFixed, then split the
  *   same proportional way.
  * - Every share is a whole number of units; leftovers go by largest
@@ -118,13 +127,21 @@ export function splitBill(
     assignees.forEach((pid, i) => shares.set(pid, (shares.get(pid) ?? 0) + split[i]));
   }
 
-  // 2. Extras, proportional to each person's subtotal.
-  const tax = (itemsSubtotal * extras.taxPercent) / 100;
-  const service = (itemsSubtotal * extras.servicePercent) / 100;
+  // 2. Discount (off the items subtotal), then extras computed on the
+  // discounted subtotal — that's how restaurant receipts do it.
+  const discount =
+    extras.discountType === "fixed"
+      ? extras.discountValue
+      : (itemsSubtotal * extras.discountValue) / 100;
+  const rDiscount = r(Math.min(itemsSubtotal, Math.max(0, discount)));
+  const discountedSubtotal = Math.max(0, itemsSubtotal - rDiscount);
+
+  const tax = (discountedSubtotal * extras.taxPercent) / 100;
+  const service = (discountedSubtotal * extras.servicePercent) / 100;
   const tip =
     extras.tipFixed > 0
       ? extras.tipFixed
-      : (itemsSubtotal * extras.tipPercent) / 100;
+      : (discountedSubtotal * extras.tipPercent) / 100;
 
   // Round the extras FIRST, then build the grand total from the rounded
   // parts. Rounding the total independently would let the displayed
@@ -133,7 +150,7 @@ export function splitBill(
   const rTax = r(tax);
   const rService = r(service);
   const rTip = r(tip);
-  const grandTotal = r(billedSubtotal + rTax + rService + rTip);
+  const grandTotal = r(billedSubtotal - rDiscount + rTax + rService + rTip);
 
   // Each rounded extra is split into whole units in proportion to subtotals,
   // so a person's total is exactly the parts on their card, nobody who
@@ -149,6 +166,7 @@ export function splitBill(
   const taxShares = allocate(rTax, weights);
   const serviceShares = allocate(rService, weights);
   const tipShares = allocate(rTip, weights);
+  const discountShares = allocate(rDiscount, weights);
 
   const peopleBreakdown: PersonBreakdown[] = people.map((p, i) => {
     const subtotal = shares.get(p.id) ?? 0;
@@ -158,10 +176,11 @@ export function splitBill(
         .filter((it) => itemShares.get(it.id)?.has(p.id))
         .map((it) => ({ item: it, share: itemShares.get(it.id)?.get(p.id) ?? 0 })),
       subtotal,
+      discountShare: discountShares[i],
       taxShare: taxShares[i],
       serviceShare: serviceShares[i],
       tipShare: tipShares[i],
-      total: r(subtotal + taxShares[i] + serviceShares[i] + tipShares[i]),
+      total: r(subtotal - discountShares[i] + taxShares[i] + serviceShares[i] + tipShares[i]),
     };
   });
 
@@ -177,6 +196,7 @@ export function splitBill(
   return {
     people: peopleBreakdown,
     itemsSubtotal,
+    discount: rDiscount,
     tax: rTax,
     service: rService,
     tip: rTip,

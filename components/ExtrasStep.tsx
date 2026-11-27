@@ -48,8 +48,50 @@ export default function ExtrasStep({ extras, currency, onChange }: Props) {
   return (
     <div className="space-y-4">
       <div className={`${card} space-y-4`}>
-        {field("Tax", extras.taxPercent, (n) => set({ taxPercent: n }), "%")}
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-sm font-semibold text-stone-600">Discount</span>
+            <div className="relative">
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="any"
+                value={extras.discountValue}
+                onChange={(e) => set({ discountValue: num(e.target.value) })}
+                className={`${input} pr-14`}
+              />
+              <select
+                aria-label="Discount unit"
+                value={extras.discountType}
+                onChange={(e) => set({ discountType: e.target.value === "percent" ? "percent" : "fixed" })}
+                className="absolute inset-y-1 right-1 rounded-lg bg-transparent pr-1 text-sm text-stone-400 appearance-none"
+              >
+                <option value="fixed">{fixedSuffix}</option>
+                <option value="percent">%</option>
+              </select>
+            </div>
+          </label>
+          <div className="self-end pb-1">
+            <label className="flex min-h-11 items-center gap-3">
+              <input
+                type="checkbox"
+                checked={extras.pricesIncludeTax}
+                onChange={(e) => set({ pricesIncludeTax: e.target.checked, taxPercent: e.target.checked ? 0 : extras.taxPercent })}
+                className="h-5 w-5 accent-stone-800"
+              />
+              <span className="text-sm font-semibold text-stone-600">Prices include tax</span>
+            </label>
+            {extras.pricesIncludeTax && (
+              <p className="mt-1 text-xs text-stone-400">Tax is set to 0 — the printed total already has it baked in.</p>
+            )}
+          </div>
+        </div>
+        {field("Tax", extras.taxPercent, (n) => set({ taxPercent: extras.pricesIncludeTax ? 0 : n }), "%")}
         {field("Service charge", extras.servicePercent, (n) => set({ servicePercent: n }), "%")}
+        <p className="text-sm text-stone-500">
+          The discount comes off the items total first; tax and service are then calculated on the discounted amount.
+        </p>
       </div>
 
       <div className={`${card} space-y-3`}>

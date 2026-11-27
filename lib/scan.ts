@@ -8,6 +8,7 @@ export type ScannedItem = { name: string; price: number; qty: number };
 export type ScannedReceipt = {
   items: ScannedItem[];
   subtotal: number;
+  discount: number; // total discount, a POSITIVE number (0 when none)
   tax: number;
   service: number;
   total: number;
@@ -29,14 +30,19 @@ export function validateScannedReceipt(data: unknown): ScannedReceipt | null {
   if (!Array.isArray(d.items)) return null;
 
   const items: ScannedItem[] = [];
+  let discount = 0;
   for (const raw of d.items) {
     if (typeof raw !== "object" || raw === null) return null;
     const it = raw as Record<string, unknown>;
     if (typeof it.name !== "string" || !it.name.trim()) return null;
     // Discount lines come in with negative amounts (e.g. "Open Discount
     // -74,001"). Dropping one shouldn't throw away the whole receipt —
-    // skip it and keep reading.
-    if (!isNum(it.price) || it.price < 0) continue;
+    // keep its amount (made positive) in the discount field and read on.
+    if (!isNum(it.price)) continue;
+    if (it.price < 0) {
+      discount += Math.abs(it.price);
+      continue;
+    }
     const qty = isNum(it.qty) ? Math.max(1, Math.floor(it.qty)) : 1;
     items.push({ name: it.name.trim(), price: it.price, qty });
   }
@@ -45,6 +51,7 @@ export function validateScannedReceipt(data: unknown): ScannedReceipt | null {
   return {
     items,
     subtotal: num(d.subtotal),
+    discount: Math.max(discount, num(d.discount)),
     tax: num(d.tax),
     service: num(d.service),
     total: num(d.total),

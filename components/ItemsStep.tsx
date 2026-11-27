@@ -15,8 +15,8 @@ type Props = {
   onChange: (items: Item[]) => void;
   onScanned: (receipt: ScannedReceipt, startedBillVersion: number) => void;
   getBillVersion: () => number;
-  scanCheck: { scannedTotal: number; itemsTotal: number } | null;
-  onScanCheck: (check: { scannedTotal: number; itemsTotal: number } | null) => void;
+  scanCheck: { scannedTotal: number; computedTotal: number } | null;
+  onScanCheck: (check: { scannedTotal: number; computedTotal: number } | null) => void;
 };
 
 export default function ItemsStep({ people, items, onChange, onScanned, getBillVersion, scanCheck }: Props) {
@@ -47,7 +47,11 @@ export default function ItemsStep({ people, items, onChange, onScanned, getBillV
   };
 
   const unassigned = items.filter((it) => it.assignedTo.length === 0).length;
-  const scanMatches = scanCheck && Math.abs(scanCheck.scannedTotal - scanCheck.itemsTotal) < 1;
+  // Warn only when the scanned total is really off: more than 1% OR more
+  // than 1,000 (a unit like đ) away from the computed grand total.
+  const diff = scanCheck ? Math.abs(scanCheck.scannedTotal - scanCheck.computedTotal) : 0;
+  const withinTolerance = diff <= Math.max(scanCheck ? scanCheck.computedTotal * 0.01 : 0, 1000);
+  const scanMatches = scanCheck ? withinTolerance : false;
 
   return (
     <div className="space-y-4">
@@ -64,8 +68,8 @@ export default function ItemsStep({ people, items, onChange, onScanned, getBillV
           }`}
         >
           {scanMatches
-            ? `✓ Scanned total matches items (${scanCheck.itemsTotal.toLocaleString("de-DE")})`
-            : `⚠ Scanned total ${scanCheck.scannedTotal.toLocaleString("de-DE")} ≠ items total ${scanCheck.itemsTotal.toLocaleString("de-DE")} — check the items below`}
+            ? `✓ Scanned total matches the computed total (${scanCheck.computedTotal.toLocaleString("de-DE")})`
+            : `⚠ Scanned total ${scanCheck.scannedTotal.toLocaleString("de-DE")} ≠ computed total ${scanCheck.computedTotal.toLocaleString("de-DE")} — check tax, service or items`}
         </p>
       )}
 

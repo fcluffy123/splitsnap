@@ -34,13 +34,18 @@ const STEPS = [
 const STORAGE_KEY = "splitsnap-bill-v1";
 
 const DEFAULT_EXTRAS: Extras = {
-  taxPercent: 10,
+  taxPercent: 0,
   servicePercent: 0,
   tipPercent: 0,
   tipFixed: 0,
+  discountType: "fixed",
+  discountValue: 0,
+  pricesIncludeTax: false,
 };
 
-type ScanCheck = { scannedTotal: number; itemsTotal: number } | null;
+type ScanCheck = { scannedTotal: number; computedTotal: number } | null;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export default function Home() {
   const [step, setStep] = useState(0);
@@ -67,7 +72,14 @@ export default function Home() {
         if (Array.isArray(saved.people)) setPeople(saved.people);
         if (Array.isArray(saved.items)) setItems(saved.items);
         if (saved.extras) setExtras({ ...DEFAULT_EXTRAS, ...saved.extras });
-        if (saved.scanCheck) setScanCheck(saved.scanCheck);
+        // Only restore a scan check in the current shape (computedTotal).
+        if (
+          saved.scanCheck &&
+          typeof saved.scanCheck.scannedTotal === "number" &&
+          typeof saved.scanCheck.computedTotal === "number"
+        ) {
+          setScanCheck(saved.scanCheck);
+        }
         if (saved.currency) setCurrency(saved.currency);
       }
     } catch {
@@ -166,8 +178,37 @@ export default function Home() {
       assignedTo: [],
     }));
     setItems((prev) => [...prev, ...scanned]);
+
+    // Prefill Extras from the receipt: tax/service become percentages of the
+    // scanned subtotal (2 decimals); no tax printed means 0%. A discount
+    // becomes a fixed discount in Extras.
     const itemsTotal = receipt.items.reduce((s, it) => s + it.price * it.qty, 0);
-    setScanCheck({ scannedTotal: receipt.total, itemsTotal });
+    const subtotal = receipt.subtotal > 0 ? receipt.subtotal : itemsTotal;
+    const taxPercent = receipt.tax > 0 ? round2((receipt.tax / subtotal) * 100) : 0;
+    const servicePercent =
+      receipt.service > 0 ? round2((receipt.service / subtotal) * 100) : 0;
+    const discount = receipt.discount > 0 ? receipt.discount : 0;
+    const merged: Extras = {
+      ...extras,
+      taxPercent,
+      servicePercent,
+      discountType: "fixed",
+      discountValue: discount,
+    };
+    setExtras(merged);
+
+    // Total check: the scanned total should match the computed GRAND total
+    // (items minus discount plus tax, service and tip) — not the raw items sum.
+    const disc = Math.min(
+      Math.max(0, merged.discountValue),
+      itemsTotal
+    );
+    const base = itemsTotal - disc;
+    const tip =
+      merged.tipFixed > 0 ? merged.tipFixed : (base * merged.tipPercent) / 100;
+    const computedTotal =
+      base + (base * merged.taxPercent) / 100 + (base * merged.servicePercent) / 100 + tip;
+    setScanCheck({ scannedTotal: receipt.total, computedTotal });
   };
 
   if (!hydrated) return null; // avoid flashing empty state before localStorage loads

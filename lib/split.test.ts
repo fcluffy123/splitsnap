@@ -9,12 +9,21 @@ import {
   smallestUnit,
   type Person,
   type Item,
+  type Extras,
 } from "./split.ts";
 
 const lan: Person = { id: "p1", name: "Lan", color: "#f43f5e" };
 const minh: Person = { id: "p2", name: "Minh", color: "#3b82f6" };
 
-const noExtras = { taxPercent: 0, servicePercent: 0, tipPercent: 0, tipFixed: 0 };
+const noExtras: Extras = {
+  taxPercent: 0,
+  servicePercent: 0,
+  tipPercent: 0,
+  tipFixed: 0,
+  discountType: "fixed",
+  discountValue: 0,
+  pricesIncludeTax: false,
+};
 
 function item(id: string, name: string, price: number, qty: number, assignedTo: string[]): Item {
   return { id, name, price, qty, assignedTo };
@@ -133,7 +142,7 @@ test("summary text keeps cents in the USD total", () => {
 test("summary total matches the per-person shares", () => {
   // $61.40 + 7.5% tax = $66.005: a half-cent. The total shown in the summary
   // must be exactly what the per-person shares add up to — no drift either way.
-  const taxExtras = { taxPercent: 7.5, servicePercent: 0, tipPercent: 0, tipFixed: 0 };
+  const taxExtras = { ...noExtras, taxPercent: 7.5, servicePercent: 0, tipPercent: 0, tipFixed: 0 };
   const items = [item("i1", "Dinner", 61.4, 1, ["p1", "p2"])];
   const r = splitBill([lan, minh], items, taxExtras, 0.01);
   const sharesSum = r.people.reduce((s, b) => s + b.total, 0);
@@ -146,7 +155,7 @@ test("grand total rounds half-cents up (no float drift)", () => {
   // $17 + 7.5% tax = $18.275 exactly. Binary float makes 18.275/0.01 land
   // just BELOW the rounding threshold, which used to report $18.27 — a cent
   // lower than the displayed subtotal ($17.00) + tax ($1.28) = $18.28.
-  const taxExtras = { taxPercent: 7.5, servicePercent: 0, tipPercent: 0, tipFixed: 0 };
+  const taxExtras = { ...noExtras, taxPercent: 7.5, servicePercent: 0, tipPercent: 0, tipFixed: 0 };
   const items = [item("i1", "Dinner", 17, 1, ["p1", "p2"])];
   const r = splitBill([lan, minh], items, taxExtras, 0.01);
   assert.equal(r.grandTotal, 18.28);
@@ -158,7 +167,7 @@ test("rounded tax/service parts sum to the displayed grand total", () => {
   // (0.845 -> 0.85, 2.535 -> 2.54), so the total must be built from the
   // rounded parts ($20.29), not rounded independently ($20.28) — otherwise
   // the Results screen shows parts that don't add up to the total.
-  const extras = { taxPercent: 5, servicePercent: 15, tipPercent: 0, tipFixed: 0 };
+  const extras = { ...noExtras, taxPercent: 5, servicePercent: 15, tipPercent: 0, tipFixed: 0 };
   const items = [item("i1", "Dinner", 16.9, 1, ["p1", "p2"])];
   const r = splitBill([lan, minh], items, extras, 0.01);
   assert.equal(r.tax, 0.85);
@@ -179,7 +188,7 @@ test("rounding never charges or credits someone who ordered nothing", () => {
   // Only Minh orders. $1.03 + 5% tax + 15% service: tax 0.0515 -> 0.05,
   // service 0.1545 -> 0.15, so the bill is $1.23. Minh pays all of it and
   // Lan (no items) pays exactly 0 — no -$0.01 credit.
-  const extras = { taxPercent: 5, servicePercent: 15, tipPercent: 0, tipFixed: 0 };
+  const extras = { ...noExtras, taxPercent: 5, servicePercent: 15, tipPercent: 0, tipFixed: 0 };
   const items = [item("i1", "Tea", 1.03, 1, ["p2"])];
   const r = splitBill([lan, minh], items, extras, 0.01);
   assert.equal(r.people[0].total, 0);
@@ -203,7 +212,7 @@ test("each person's total equals the rounded parts on their card", () => {
   // combined charge used to give Hoa $0.38 while her card listed
   // $0.33 + $0.02 tax + $0.02 service = $0.37.
   const hoa: Person = { id: "p3", name: "Hoa", color: "#22c55e" };
-  const extras = { taxPercent: 7.5, servicePercent: 5, tipPercent: 0, tipFixed: 0 };
+  const extras = { ...noExtras, taxPercent: 7.5, servicePercent: 5, tipPercent: 0, tipFixed: 0 };
   const items = [
     item("i1", "Rolls", 1, 1, ["p1", "p2", "p3"]),
     item("i2", "Tea", 1.3, 1, ["p2"]),
@@ -223,7 +232,7 @@ test("rounding never pushes a diner's share below zero", () => {
   // to overshoot the bill, and Lan (absorbing the leftover) owed -$0.01.
   const hoa: Person = { id: "p3", name: "Hoa", color: "#22c55e" };
   const tuan: Person = { id: "p4", name: "Tuan", color: "#f59e0b" };
-  const extras = { taxPercent: 5, servicePercent: 15, tipPercent: 10, tipFixed: 0 };
+  const extras = { ...noExtras, taxPercent: 5, servicePercent: 15, tipPercent: 10, tipFixed: 0 };
   const items = [
     item("i1", "Tea", 0.29, 1, ["p2"]),
     item("i2", "Mint", 0.01, 1, ["p1", "p2"]),
@@ -249,9 +258,67 @@ test("items of a removed person are unassigned, not charged to someone else", ()
 });
 
 test("a fixed tip on a free order is still split", () => {
-  const extras = { taxPercent: 0, servicePercent: 0, tipPercent: 0, tipFixed: 5 };
+  const extras = { ...noExtras, tipFixed: 5 };
   const items = [item("i1", "Water", 0, 1, ["p1", "p2"])];
   const r = splitBill([lan, minh], items, extras, 0.01);
   assert.equal(r.grandTotal, 5);
   assert.equal(r.people[0].total + r.people[1].total, 5);
+});
+
+test("fixed discount comes off items subtotal before tax and splits proportionally", () => {
+  // Lan 100k, Minh 300k. Discount 40k -> Lan -10k, Minh -30k.
+  // 10% tax on the discounted 360k = 36k -> Lan +9k, Minh +27k.
+  // Lan pays 100k - 10k + 9k = 99k; Minh 300k - 30k + 27k = 297k.
+  const items = [
+    item("i1", "Pho", 100000, 1, ["p1"]),
+    item("i2", "Banh", 300000, 1, ["p2"]),
+  ];
+  const extras = { ...noExtras, taxPercent: 10, discountType: "fixed" as const, discountValue: 40000, pricesIncludeTax: false };
+  const r = splitBill([lan, minh], items, extras);
+  assert.equal(r.itemsSubtotal, 400000);
+  assert.equal(r.discount, 40000);
+  assert.equal(r.tax, 36000);
+  assert.equal(r.grandTotal, 396000);
+  assert.equal(r.people[0].total, 99000);
+  assert.equal(r.people[1].total, 297000);
+  assert.equal(r.people[0].total + r.people[1].total, r.grandTotal);
+});
+
+test("percent discount behaves like a fixed amount", () => {
+  // 200k with 5% discount = 10k off. Shared evenly -> each pays 95k.
+  const items = [item("i1", "Pho", 200000, 1, ["p1", "p2"])];
+  const extras = { ...noExtras, discountType: "percent" as const, discountValue: 5, pricesIncludeTax: false };
+  const r = splitBill([lan, minh], items, extras);
+  assert.equal(r.discount, 10000);
+  assert.equal(r.grandTotal, 190000);
+  assert.equal(r.people[0].total, 95000);
+  assert.equal(r.people[1].total, 95000);
+});
+
+test("discount splits exactly even when it does not divide evenly", () => {
+  // 100k discount over 3 equal 100k shares. VND has no decimals, so nobody
+  // can pay exactly 33333.33 — the leftover 1đ goes to one person by largest
+  // remainder, and the parts still sum to exactly 100k.
+  const ut = { id: "p3", name: "Ut", color: "#22c55e" };
+  const items = [
+    item("i1", "Pho", 300000, 1, ["p1", "p2", "p3"]),
+    item("i2", "Beer", 0, 1, ["p1", "p2", "p3"]),
+  ];
+  const extras = { ...noExtras, discountType: "fixed" as const, discountValue: 100000, pricesIncludeTax: false };
+  const r = splitBill([lan, minh, ut], items, extras);
+  assert.equal(r.grandTotal, 200000);
+  for (const p of r.people) {
+    assert.ok(p.total === 66666 || p.total === 66667, `${p.person.name}: ${p.total}`);
+  }
+  assert.equal(r.people[0].total + r.people[1].total + r.people[2].total, r.grandTotal);
+});
+
+test("discount never drives a share or the total negative", () => {
+  const items = [item("i1", "Coffee", 20000, 1, ["p1", "p2"])];
+  const extras = { ...noExtras, discountType: "fixed" as const, discountValue: 50000, pricesIncludeTax: false };
+  const r = splitBill([lan, minh], items, extras);
+  assert.equal(r.discount, 20000);
+  assert.equal(r.grandTotal, 0);
+  assert.equal(r.people[0].total, 0);
+  assert.equal(r.people[1].total, 0);
 });
