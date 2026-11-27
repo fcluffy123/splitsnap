@@ -129,6 +129,16 @@ export default function Home() {
     }
   };
 
+  // Removing a person also unassigns them, so their items get flagged
+  // instead of silently landing on someone else.
+  const updatePeople = (next: Person[]) => {
+    setPeople(next);
+    const ids = new Set(next.map((p) => p.id));
+    setItems((prev) =>
+      prev.map((it) => ({ ...it, assignedTo: it.assignedTo.filter((id) => ids.has(id)) }))
+    );
+  };
+
   const newBill = () => {
     // Bump the version first so any scan still in flight is dropped.
     billVersionRef.current += 1;
@@ -187,7 +197,7 @@ export default function Home() {
           <p className="text-stone-500">{current.hint}</p>
         </div>
 
-        {step === 0 && <PeopleStep people={people} onChange={setPeople} />}
+        {step === 0 && <PeopleStep people={people} onChange={updatePeople} />}
         {step === 1 && (
           <ItemsStep
             people={people}
