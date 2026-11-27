@@ -2,6 +2,8 @@
 
 // Step 1: add the people splitting the bill (minimum 2).
 import type { Person } from "@/lib/split";
+import EmptyState from "./EmptyState";
+import { initial, input, primaryBtn, textOn } from "./ui";
 
 // Fixed palette so chips always look distinct.
 const PALETTE = [
@@ -29,55 +31,60 @@ export default function PeopleStep({ people, onChange }: Props) {
 
   return (
     <div className="space-y-4">
-      <p className="text-stone-600">
-        Who's splitting this bill? Add at least 2 people.
-      </p>
-
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          const input = e.currentTarget.elements.namedItem("name") as HTMLInputElement;
-          addPerson(input.value);
-          input.value = "";
+          const field = e.currentTarget.elements.namedItem("name") as HTMLInputElement;
+          addPerson(field.value);
+          field.value = "";
+          field.focus(); // keep the keyboard open for the next name
         }}
         className="flex gap-2"
       >
+        <label htmlFor="person-name" className="sr-only">Person's name</label>
         <input
+          id="person-name"
           name="name"
           placeholder="Name (e.g. Lan)"
-          className="flex-1 rounded-xl border border-stone-300 bg-white px-4 py-3 text-lg outline-none focus:border-amber-500"
+          autoComplete="off"
+          enterKeyHint="done"
+          className={`${input} flex-1`}
         />
-        <button
-          type="submit"
-          className="rounded-xl bg-amber-500 px-5 py-3 text-lg font-semibold text-white active:bg-amber-600"
-        >
+        <button type="submit" className={`${primaryBtn} text-lg`}>
           Add
         </button>
       </form>
 
-      <div className="flex flex-wrap gap-2">
-        {people.map((p) => (
-          <span
-            key={p.id}
-            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-white text-base font-medium"
-            style={{ backgroundColor: p.color }}
-          >
-            {p.name}
-            <button
-              onClick={() => removePerson(p.id)}
-              aria-label={`Remove ${p.name}`}
-              className="ml-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/20 text-sm leading-none"
+      {people.length === 0 ? (
+        <EmptyState icon="👋" title="Nobody here yet">
+          Add everyone at the table — you can remove names any time.
+        </EmptyState>
+      ) : (
+        <ul className="flex flex-wrap gap-2" aria-label="People">
+          {people.map((p) => (
+            <li
+              key={p.id}
+              className="motion-safe:animate-row-in inline-flex min-h-11 items-center gap-2 rounded-full bg-white py-1 pl-1 pr-1 shadow-card"
             >
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
-
-      {people.length < 2 && (
-        <p className="rounded-xl bg-amber-100 px-4 py-3 text-amber-800">
-          Add {2 - people.length} more {people.length === 1 ? "person" : "people"} to continue.
-        </p>
+              <span
+                aria-hidden
+                className="flex h-9 w-9 items-center justify-center rounded-full font-bold"
+                style={{ backgroundColor: p.color, color: textOn(p.color) }}
+              >
+                {initial(p.name)}
+              </span>
+              <span className="font-semibold">{p.name}</span>
+              <button
+                type="button"
+                onClick={() => removePerson(p.id)}
+                aria-label={`Remove ${p.name}`}
+                className="flex h-11 w-11 items-center justify-center rounded-full text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

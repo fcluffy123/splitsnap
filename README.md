@@ -29,7 +29,7 @@ npm run build   # production build
 1. **People** — add at least 2 people (colored chips)
 2. **Items** — scan a receipt photo (compressed < 1 MB in the browser, sent to Gemini as JSON) or add items manually; tap people chips under each item to assign it (shared items split evenly)
 3. **Extras** — tax %, service charge %, tip (% or fixed amount), split **proportionally to each person's subtotal**
-4. **Results** — one card per person; unassigned items are flagged; the first person absorbs the rounding leftover so totals sum exactly to the bill total
+4. **Results** — one card per person; unassigned items are flagged; the first person with items absorbs the rounding leftover so totals sum exactly to the bill total
 
 All money math lives in `lib/split.ts` (pure functions, unit-tested).
 

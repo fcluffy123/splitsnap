@@ -9,7 +9,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#fffbeb",
+  viewportFit: "cover", // lets the bottom bar pad for the iPhone home indicator
+  themeColor: "#eef2ff",
 };
 
 export default function RootLayout({
