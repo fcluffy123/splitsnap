@@ -174,3 +174,17 @@ test("summary text warns when items are unassigned", () => {
   const text = buildSummaryText(r, "VND");
   assert.ok(text.includes("not assigned"), text);
 });
+
+test("rounding leftover never lands on a diner who ordered nothing", () => {
+  // Only Minh orders $12.53; 10% tax + 10% service each round DOWN to $1.25,
+  // so the bill is $15.03. Lan (first, no items) must owe exactly $0 — not
+  // a -$0.01 credit — and Minh's share must match the bill total.
+  const extras = { taxPercent: 10, servicePercent: 10, tipPercent: 0, tipFixed: 0 };
+  const items = [item("i1", "Dinner", 12.53, 1, ["p2"])];
+  const r = splitBill([lan, minh], items, extras, 0.01);
+  assert.ok(Math.abs(r.grandTotal - 15.03) < 1e-9, String(r.grandTotal));
+  assert.equal(r.people[0].total, 0);
+  assert.ok(Math.abs(r.people[1].total - 15.03) < 1e-9, String(r.people[1].total));
+  const sharesSum = r.people.reduce((s, b) => s + b.total, 0);
+  assert.equal(sharesSum, r.grandTotal);
+});
