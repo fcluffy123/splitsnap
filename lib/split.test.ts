@@ -210,10 +210,27 @@ test("each person's total equals the rounded parts on their card", () => {
   ];
   const r = splitBill([lan, minh, hoa], items, extras, 0.01);
   const cents = (n: number) => Math.round(n * 100);
-  for (const b of r.people.slice(1)) {
+  for (const b of r.people) {
     const parts = cents(b.subtotal) + cents(b.taxShare) + cents(b.serviceShare) + cents(b.tipShare);
     assert.equal(cents(b.total), parts, b.person.name);
   }
   const sum = r.people.reduce((s, p) => s + p.total, 0);
   assert.equal(cents(sum), cents(r.grandTotal));
+});
+
+test("rounding never pushes a diner's share below zero", () => {
+  // Lan's only item is half of a 1-cent mint. Everyone's rounded shares used
+  // to overshoot the bill, and Lan (absorbing the leftover) owed -$0.01.
+  const hoa: Person = { id: "p3", name: "Hoa", color: "#22c55e" };
+  const tuan: Person = { id: "p4", name: "Tuan", color: "#f59e0b" };
+  const extras = { taxPercent: 5, servicePercent: 15, tipPercent: 10, tipFixed: 0 };
+  const items = [
+    item("i1", "Tea", 0.29, 1, ["p2"]),
+    item("i2", "Mint", 0.01, 1, ["p1", "p2"]),
+    item("i3", "Rolls", 0.11, 1, ["p3", "p4"]),
+  ];
+  const r = splitBill([lan, minh, hoa, tuan], items, extras, 0.01);
+  for (const b of r.people) assert.ok(b.total >= 0, `${b.person.name}: ${b.total}`);
+  const sum = r.people.reduce((s, p) => s + p.total, 0);
+  assert.equal(Math.round(sum * 100), Math.round(r.grandTotal * 100));
 });

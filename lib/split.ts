@@ -55,9 +55,6 @@ export type SplitResult = {
   tip: number;
   grandTotal: number;
   unassignedItemIds: string[];
-  // The bill's grand total must equal the sum of everyone's total, exactly.
-  // Any rounding leftover is placed on the first person who ordered something.
-  roundingAdjustment: number;
 };
 
 // Round to the smallest currency unit. For VND that's 1; for USD/EUR, 1 cent.
@@ -80,8 +77,9 @@ export function roundMoney(value: number, smallestUnit = 1): number {
  *   to each person's subtotal.
  * - Tip is either tipPercent % of the subtotal, or tipFixed, then split the
  *   same proportional way.
- * - The first person with items absorbs the rounding leftover so the parts
- *   sum exactly to grandTotal (someone who ordered nothing always pays 0).
+ * - Every share is a whole number of units; leftovers go by largest
+ *   remainder, so the parts sum exactly to grandTotal (someone who ordered
+ *   nothing always pays 0).
  */
 export function splitBill(
   people: Person[],
@@ -89,24 +87,35 @@ export function splitBill(
   extras: Extras,
   smallestUnit = 1
 ): SplitResult {
-  // 1. Per-person item shares.
+  const r = (n: number) => roundMoney(n, smallestUnit);
+  const allocate = (amount: number, weights: number[]) =>
+    allocateUnits(amount, weights, smallestUnit);
+
+  // 1. Per-person item shares. Each line total is split into whole units
+  // (a 1-cent remainder goes to the first assignee), so shares add up exactly.
   const shares = new Map<string, number>();
   for (const p of people) shares.set(p.id, 0);
+  const itemShares = new Map<string, number[]>();
 
   const unassignedItemIds: string[] = [];
   let itemsSubtotal = 0;
+  let billedSubtotal = 0; // sum of rounded line totals
+  let unassignedSubtotal = 0;
 
   for (const item of items) {
     const lineTotal = item.price * item.qty;
     itemsSubtotal += lineTotal;
+    billedSubtotal += r(lineTotal);
     if (item.assignedTo.length === 0) {
       unassignedItemIds.push(item.id);
+      unassignedSubtotal += r(lineTotal);
       continue;
     }
-    const perPerson = lineTotal / item.assignedTo.length;
-    for (const pid of item.assignedTo) {
-      if (shares.has(pid)) shares.set(pid, (shares.get(pid) ?? 0) + perPerson);
-    }
+    const split = allocate(lineTotal, item.assignedTo.map(() => 1));
+    itemShares.set(item.id, split);
+    item.assignedTo.forEach((pid, i) => {
+      if (shares.has(pid)) shares.set(pid, (shares.get(pid) ?? 0) + split[i]);
+    });
   }
 
   // 2. Extras, proportional to each person's subtotal.
@@ -117,8 +126,6 @@ export function splitBill(
       ? extras.tipFixed
       : (itemsSubtotal * extras.tipPercent) / 100;
 
-  const r = (n: number) => roundMoney(n, smallestUnit);
-
   // Round the extras FIRST, then build the grand total from the rounded
   // parts. Rounding the total independently would let the displayed
   // tax/service/tip sum disagree with the displayed total by 1 unit
@@ -126,58 +133,70 @@ export function splitBill(
   const rTax = r(tax);
   const rService = r(service);
   const rTip = r(tip);
-  const exactGrand = itemsSubtotal + rTax + rService + rTip;
+  const grandTotal = r(billedSubtotal + rTax + rService + rTip);
 
-  // Each person's extras are shares of the ROUNDED extras (the same ones the
-  // grand total is built from), and their total is built from the rounded
-  // parts shown on their card, so every card adds up on its own.
-  // If the whole bill is unassigned (itemsSubtotal = 0) nobody gets extras.
-  const peopleBreakdown: PersonBreakdown[] = people.map((p) => {
+  // Each rounded extra is split into whole units in proportion to subtotals,
+  // so a person's total is exactly the parts on their card, nobody who
+  // ordered nothing pays anything, and no share can go negative. Unassigned
+  // items keep their own portion (the last weight) until someone takes them.
+  const weights = [...people.map((p) => shares.get(p.id) ?? 0), unassignedSubtotal];
+  const taxShares = allocate(rTax, weights);
+  const serviceShares = allocate(rService, weights);
+  const tipShares = allocate(rTip, weights);
+
+  const peopleBreakdown: PersonBreakdown[] = people.map((p, i) => {
     const subtotal = shares.get(p.id) ?? 0;
-    const prop = itemsSubtotal > 0 ? subtotal / itemsSubtotal : 0;
-    const taxShare = r(rTax * prop);
-    const serviceShare = r(rService * prop);
-    const tipShare = r(rTip * prop);
     return {
       person: p,
       items: items
         .filter((it) => it.assignedTo.includes(p.id))
-        .map((it) => ({ item: it, share: (it.price * it.qty) / it.assignedTo.length })),
+        .map((it) => ({
+          item: it,
+          share: itemShares.get(it.id)?.[it.assignedTo.indexOf(p.id)] ?? 0,
+        })),
       subtotal,
-      taxShare,
-      serviceShare,
-      tipShare,
-      total: r(subtotal) + taxShare + serviceShare + tipShare,
+      taxShare: taxShares[i],
+      serviceShare: serviceShares[i],
+      tipShare: tipShares[i],
+      total: r(subtotal + taxShares[i] + serviceShares[i] + tipShares[i]),
     };
   });
 
-  // The first person who ordered something absorbs the rounding leftover so
-  // the parts sum exactly to the rounded grand total. Falls back to the first
-  // person only when nobody has items (then every total is 0 anyway).
-  let roundingAdjustment = 0;
-  if (peopleBreakdown.length > 0) {
-    const absorber = Math.max(
-      0,
-      peopleBreakdown.findIndex((b) => b.subtotal > 0)
-    );
-    const sum = peopleBreakdown.reduce((s, b) => s + b.total, 0);
-    roundingAdjustment = exactGrand - sum;
-    peopleBreakdown[absorber].total += roundingAdjustment;
+  // When every item is assigned the shares already sum to grandTotal in whole
+  // units; this only absorbs binary-float noise (e.g. 33.01 + 33 = 66.00999…)
+  // so the sum compares equal. It never moves a real unit.
+  const payer = peopleBreakdown.find((b) => b.subtotal > 0);
+  if (payer && unassignedItemIds.length === 0) {
+    const others = peopleBreakdown.reduce((s, b) => (b === payer ? s : s + b.total), 0);
+    payer.total = grandTotal - others;
   }
 
-  // The grand total is built from the rounded parts above, so the displayed
-  // tax/service/tip always add up to the displayed total, and the per-person
-  // totals (with one diner absorbing the leftover) sum to it exactly.
   return {
     people: peopleBreakdown,
     itemsSubtotal,
     tax: rTax,
     service: rService,
     tip: rTip,
-    grandTotal: exactGrand,
+    grandTotal,
     unassignedItemIds,
-    roundingAdjustment,
   };
+}
+
+// Split `amount` (rounded to whole units) in proportion to `weights` using
+// largest remainders: everyone gets a whole number of units, the parts sum
+// exactly to the rounded amount, and zero weight always means zero.
+function allocateUnits(amount: number, weights: number[], unit: number): number[] {
+  const units = Math.round(roundMoney(amount, unit) / unit);
+  const totalWeight = weights.reduce((s, w) => s + w, 0);
+  if (units === 0 || totalWeight <= 0) return weights.map(() => 0);
+  const exact = weights.map((w) => (units * w) / totalWeight);
+  const whole = exact.map((x) => Math.floor(x + 1e-9));
+  let left = units - whole.reduce((s, u) => s + u, 0);
+  const byRemainder = exact
+    .map((x, i) => ({ i, rem: x - whole[i] }))
+    .sort((a, b) => b.rem - a.rem);
+  for (let k = 0; left > 0; k++, left--) whole[byRemainder[k].i] += 1;
+  return whole.map((u) => roundMoney(u * unit, unit));
 }
 
 /** Format a number as currency. VND: 125000 -> "125.000đ", USD/EUR: 12.5 -> "$12.50". */
