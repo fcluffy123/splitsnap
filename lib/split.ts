@@ -128,32 +128,26 @@ export function splitBill(
   const rTip = r(tip);
   const exactGrand = itemsSubtotal + rTax + rService + rTip;
 
-  // Weight each person's share by the ROUNDED extras, the same ones the
-  // grand total is built from. Weighting by the raw extras would make the
-  // per-person totals target a different bill than grandTotal.
-  const extrasTotal = rTax + rService + rTip;
-
-  // Raw (unrounded) total per person: subtotal + proportional extras.
+  // Each person's extras are shares of the ROUNDED extras (the same ones the
+  // grand total is built from), and their total is built from the rounded
+  // parts shown on their card, so every card adds up on its own.
   // If the whole bill is unassigned (itemsSubtotal = 0) nobody gets extras.
-  const rawTotal = (pid: string) => {
-    const subtotal = shares.get(pid) ?? 0;
-    const prop = itemsSubtotal > 0 ? subtotal / itemsSubtotal : 0;
-    return subtotal + extrasTotal * prop;
-  };
-
   const peopleBreakdown: PersonBreakdown[] = people.map((p) => {
     const subtotal = shares.get(p.id) ?? 0;
     const prop = itemsSubtotal > 0 ? subtotal / itemsSubtotal : 0;
+    const taxShare = r(rTax * prop);
+    const serviceShare = r(rService * prop);
+    const tipShare = r(rTip * prop);
     return {
       person: p,
       items: items
         .filter((it) => it.assignedTo.includes(p.id))
         .map((it) => ({ item: it, share: (it.price * it.qty) / it.assignedTo.length })),
       subtotal,
-      taxShare: r(rTax * prop),
-      serviceShare: r(rService * prop),
-      tipShare: r(rTip * prop),
-      total: r(rawTotal(p.id)),
+      taxShare,
+      serviceShare,
+      tipShare,
+      total: r(subtotal) + taxShare + serviceShare + tipShare,
     };
   });
 

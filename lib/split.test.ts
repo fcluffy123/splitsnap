@@ -197,3 +197,23 @@ test("rounding leftover goes to a diner, not a non-diner listed first", () => {
   const sum = r.people.reduce((s, p) => s + p.total, 0);
   assert.ok(Math.abs(sum - 0.01) < 1e-9);
 });
+
+test("each person's total equals the rounded parts on their card", () => {
+  // $1 shared 3 ways + $1.30 for Minh, 7.5% tax + 5% service. Rounding the
+  // combined charge used to give Hoa $0.38 while her card listed
+  // $0.33 + $0.02 tax + $0.02 service = $0.37.
+  const hoa: Person = { id: "p3", name: "Hoa", color: "#22c55e" };
+  const extras = { taxPercent: 7.5, servicePercent: 5, tipPercent: 0, tipFixed: 0 };
+  const items = [
+    item("i1", "Rolls", 1, 1, ["p1", "p2", "p3"]),
+    item("i2", "Tea", 1.3, 1, ["p2"]),
+  ];
+  const r = splitBill([lan, minh, hoa], items, extras, 0.01);
+  const cents = (n: number) => Math.round(n * 100);
+  for (const b of r.people.slice(1)) {
+    const parts = cents(b.subtotal) + cents(b.taxShare) + cents(b.serviceShare) + cents(b.tipShare);
+    assert.equal(cents(b.total), parts, b.person.name);
+  }
+  const sum = r.people.reduce((s, p) => s + p.total, 0);
+  assert.equal(cents(sum), cents(r.grandTotal));
+});

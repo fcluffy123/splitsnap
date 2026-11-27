@@ -6,6 +6,7 @@
 import {
   splitBill,
   formatMoney,
+  roundMoney,
   smallestUnit,
   type Currency,
   type Extras,
@@ -27,6 +28,12 @@ type Props = {
 export default function ResultsStep({ people, items, extras, currency, onGoTo }: Props) {
   const result = splitBill(people, items, extras, smallestUnit(currency));
   const fmt = (n: number) => formatMoney(n, currency);
+  const unit = smallestUnit(currency);
+  // Leftover cent(s) one diner absorbs so shares sum to the bill (lib/split.ts).
+  const roundingOf = (b: (typeof result.people)[number]) => {
+    const diff = b.total - (roundMoney(b.subtotal, unit) + b.taxShare + b.serviceShare + b.tipShare);
+    return Math.abs(diff) >= unit / 2 ? diff : 0;
+  };
 
   if (people.length === 0 || items.length === 0) {
     const noPeople = people.length === 0;
@@ -145,6 +152,7 @@ export default function ResultsStep({ people, items, extras, currency, onGoTo }:
                     ["Tax", b.taxShare],
                     ["Service", b.serviceShare],
                     ["Tip", b.tipShare],
+                    ["Rounding", roundingOf(b)],
                   ]
                     // Hide extras that don't apply (e.g. no tip) to keep cards short.
                     .filter(([label, value]) => label === "Subtotal" || value !== 0)
