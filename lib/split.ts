@@ -95,7 +95,7 @@ export function splitBill(
   // (a 1-cent remainder goes to the first assignee), so shares add up exactly.
   const shares = new Map<string, number>();
   for (const p of people) shares.set(p.id, 0);
-  const itemShares = new Map<string, number[]>();
+  const itemShares = new Map<string, Map<string, number>>();
 
   const unassignedItemIds: string[] = [];
   let itemsSubtotal = 0;
@@ -106,16 +106,16 @@ export function splitBill(
     const lineTotal = item.price * item.qty;
     itemsSubtotal += lineTotal;
     billedSubtotal += r(lineTotal);
-    if (item.assignedTo.length === 0) {
+    // Ids of removed people don't count: an item only they had is unassigned.
+    const assignees = item.assignedTo.filter((pid) => shares.has(pid));
+    if (assignees.length === 0) {
       unassignedItemIds.push(item.id);
       unassignedSubtotal += r(lineTotal);
       continue;
     }
-    const split = allocate(lineTotal, item.assignedTo.map(() => 1));
-    itemShares.set(item.id, split);
-    item.assignedTo.forEach((pid, i) => {
-      if (shares.has(pid)) shares.set(pid, (shares.get(pid) ?? 0) + split[i]);
-    });
+    const split = allocate(lineTotal, assignees.map(() => 1));
+    itemShares.set(item.id, new Map(assignees.map((pid, i) => [pid, split[i]])));
+    assignees.forEach((pid, i) => shares.set(pid, (shares.get(pid) ?? 0) + split[i]));
   }
 
   // 2. Extras, proportional to each person's subtotal.
@@ -139,7 +139,13 @@ export function splitBill(
   // so a person's total is exactly the parts on their card, nobody who
   // ordered nothing pays anything, and no share can go negative. Unassigned
   // items keep their own portion (the last weight) until someone takes them.
-  const weights = [...people.map((p) => shares.get(p.id) ?? 0), unassignedSubtotal];
+  // If every item is free (only a fixed tip costs anything), split it evenly
+  // among the people who had items.
+  let weights = [...people.map((p) => shares.get(p.id) ?? 0), unassignedSubtotal];
+  if (weights.every((w) => w === 0)) {
+    const hadItems = new Set([...itemShares.values()].flatMap((m) => [...m.keys()]));
+    weights = [...people.map((p) => (hadItems.has(p.id) ? 1 : 0)), unassignedItemIds.length > 0 ? 1 : 0];
+  }
   const taxShares = allocate(rTax, weights);
   const serviceShares = allocate(rService, weights);
   const tipShares = allocate(rTip, weights);
@@ -149,11 +155,8 @@ export function splitBill(
     return {
       person: p,
       items: items
-        .filter((it) => it.assignedTo.includes(p.id))
-        .map((it) => ({
-          item: it,
-          share: itemShares.get(it.id)?.[it.assignedTo.indexOf(p.id)] ?? 0,
-        })),
+        .filter((it) => itemShares.get(it.id)?.has(p.id))
+        .map((it) => ({ item: it, share: itemShares.get(it.id)?.get(p.id) ?? 0 })),
       subtotal,
       taxShare: taxShares[i],
       serviceShare: serviceShares[i],
@@ -165,7 +168,7 @@ export function splitBill(
   // When every item is assigned the shares already sum to grandTotal in whole
   // units; this only absorbs binary-float noise (e.g. 33.01 + 33 = 66.00999…)
   // so the sum compares equal. It never moves a real unit.
-  const payer = peopleBreakdown.find((b) => b.subtotal > 0);
+  const payer = peopleBreakdown.find((b) => b.total > 0);
   if (payer && unassignedItemIds.length === 0) {
     const others = peopleBreakdown.reduce((s, b) => (b === payer ? s : s + b.total), 0);
     payer.total = grandTotal - others;

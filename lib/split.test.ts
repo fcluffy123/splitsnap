@@ -234,3 +234,24 @@ test("rounding never pushes a diner's share below zero", () => {
   const sum = r.people.reduce((s, p) => s + p.total, 0);
   assert.equal(Math.round(sum * 100), Math.round(r.grandTotal * 100));
 });
+
+test("items of a removed person are unassigned, not charged to someone else", () => {
+  // "ghost" was removed from the bill but is still on the Wine's assignees.
+  const items = [
+    item("i1", "Tea", 2, 1, ["p1"]),
+    item("i2", "Wine", 10, 1, ["ghost"]),
+    item("i3", "Rolls", 4, 1, ["p2", "ghost"]),
+  ];
+  const r = splitBill([lan, minh], items, noExtras, 0.01);
+  assert.deepEqual(r.unassignedItemIds, ["i2"]);
+  assert.equal(r.people[0].total, 2);
+  assert.equal(r.people[1].total, 4); // Rolls go to Minh, the only one left on it
+});
+
+test("a fixed tip on a free order is still split", () => {
+  const extras = { taxPercent: 0, servicePercent: 0, tipPercent: 0, tipFixed: 5 };
+  const items = [item("i1", "Water", 0, 1, ["p1", "p2"])];
+  const r = splitBill([lan, minh], items, extras, 0.01);
+  assert.equal(r.grandTotal, 5);
+  assert.equal(r.people[0].total + r.people[1].total, 5);
+});
