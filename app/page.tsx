@@ -1,9 +1,8 @@
 "use client";
 
-// SplitSnap main screen — 4-step wizard: People → Items → Extras → Results.
+// SplitSnap main screen — 3-step wizard: Scan → Assign → Results.
 // All state lives here and is mirrored to localStorage so a refresh
-// doesn't lose the current bill. Phase 3 adds a currency selector,
-// a copy-summary button and a new-bill button.
+// doesn't lose the current bill.
 import { useEffect, useRef, useState } from "react";
 import PeopleStep from "@/components/PeopleStep";
 import ItemsStep from "@/components/ItemsStep";
@@ -21,7 +20,7 @@ import {
 } from "@/lib/split";
 import type { ScannedReceipt } from "@/lib/scan";
 
-const STEPS = ["People", "Items", "Extras", "Results"] as const;
+const STEPS = ["Scan", "Assign", "Results"] as const;
 const STORAGE_KEY = "splitsnap-bill-v1";
 
 const DEFAULT_EXTRAS: Extras = {
@@ -75,13 +74,31 @@ export default function Home() {
   }, [people, items, extras, scanCheck, currency, hydrated]);
 
   const canNext =
-    (step === 0 && people.length >= 2) ||
-    (step === 1 && items.length >= 1) ||
+    (step === 0 && items.length >= 1) ||
+    (step === 1 && people.length >= 2) ||
     step >= 2;
+  const nextHint =
+    step === 0 && items.length === 0
+      ? "Add at least one item to continue"
+      : step === 1 && people.length < 2
+        ? "Add at least 2 people to continue"
+        : null;
+
+  const summaryText = () =>
+    buildSummaryText(splitBill(people, items, extras, smallestUnit(currency)), currency);
+
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  const shareSummary = async () => {
+    try {
+      await navigator.share({ title: "SplitSnap", text: summaryText() });
+    } catch {
+      // User cancelled the share sheet — nothing to do.
+    }
+  };
 
   const copySummary = async () => {
-    const result = splitBill(people, items, extras, smallestUnit(currency));
-    const text = buildSummaryText(result, currency);
+    const text = summaryText();
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -126,126 +143,176 @@ export default function Home() {
 
   if (!hydrated) return null; // avoid flashing empty state before localStorage loads
 
+  const btn =
+    "min-h-11 rounded-2xl px-4 py-3 font-semibold transition duration-150 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100";
+
   return (
-    <main className="mx-auto max-w-md px-4 py-6 pb-32">
-      <header className="mb-4 text-center">
-        <h1 className="text-3xl font-extrabold tracking-tight">SplitSnap</h1>
-        <p className="text-stone-500">Split the bill fairly, in seconds.</p>
+    <main className="mx-auto max-w-md px-4 pt-6 pb-36">
+      <header className="mb-5 flex items-center gap-3">
+        <div
+          aria-hidden="true"
+          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400 text-2xl shadow-md shadow-amber-200"
+        >
+          🧾
+        </div>
+        <div className="flex-1">
+          <h1 className="text-2xl font-extrabold tracking-tight">SplitSnap</h1>
+          <p className="text-sm text-stone-500">Snap, tap, done — split the bill fairly.</p>
+        </div>
+        <label className="sr-only" htmlFor="currency">Currency</label>
+        <select
+          id="currency"
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value as Currency)}
+          className="min-h-11 rounded-xl border border-stone-200 bg-white px-3 text-sm font-bold shadow-sm"
+        >
+          {CURRENCIES.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
       </header>
 
-      {/* Currency selector */}
-      <div className="mb-4 flex items-center justify-center gap-2">
-        <span className="text-sm text-stone-500">Currency:</span>
-        {CURRENCIES.map((c) => (
-          <button
-            key={c}
-            onClick={() => setCurrency(c)}
-            className={`rounded-full px-4 py-2 text-sm font-bold ${
-              currency === c
-                ? "bg-stone-800 text-white"
-                : "bg-stone-100 text-stone-500"
-            }`}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
-
       {/* Step indicator */}
-      <ol className="mb-6 flex justify-between gap-1">
-        {STEPS.map((label, i) => (
-          <li key={label} className="flex-1 text-center">
-            <button
-              onClick={() => setStep(i)}
-              className={`w-full rounded-full px-2 py-2 text-sm font-semibold ${
-                i === step
-                  ? "bg-amber-500 text-white"
-                  : i < step
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-stone-100 text-stone-400"
-              }`}
-            >
-              {i + 1}. {label}
-            </button>
-          </li>
-        ))}
-      </ol>
-
-      {step === 0 && <PeopleStep people={people} onChange={setPeople} />}
-      {step === 1 && (
-        <ItemsStep
-          people={people}
-          items={items}
-          onChange={setItems}
-          onScanned={handleScanned}
-          getBillVersion={() => billVersionRef.current}
-          scanCheck={scanCheck}
-          onScanCheck={setScanCheck}
-        />
-      )}
-      {step === 2 && <ExtrasStep extras={extras} currency={currency} onChange={setExtras} />}
-      {step === 3 && (
-        <>
-          <ResultsStep people={people} items={items} extras={extras} currency={currency} />
-
-          {/* Phase 3 actions */}
-          <div className="mt-4 space-y-3">
-            <button
-              onClick={copySummary}
-              className="w-full rounded-2xl bg-stone-800 px-4 py-4 text-lg font-bold text-white active:bg-stone-700"
-            >
-              {copied ? "✓ Copied! Paste it in Zalo/Messenger" : "📋 Copy summary"}
-            </button>
-
-            {confirmingNewBill ? (
-              <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-                <p className="mb-3 font-semibold text-red-700">
-                  Start a new bill? The current one will be cleared.
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={newBill}
-                    className="flex-1 rounded-xl bg-red-600 px-4 py-3 font-bold text-white active:bg-red-700"
-                  >
-                    Yes, clear it
-                  </button>
-                  <button
-                    onClick={() => setConfirmingNewBill(false)}
-                    className="flex-1 rounded-xl bg-white px-4 py-3 font-semibold text-stone-600 border border-stone-300"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
+      <nav aria-label="Progress" className="mb-6">
+        <ol className="flex items-center gap-2">
+          {STEPS.map((label, i) => (
+            <li key={label} className="flex flex-1 items-center gap-2">
               <button
-                onClick={() => setConfirmingNewBill(true)}
-                className="w-full rounded-2xl bg-stone-200 px-4 py-4 text-lg font-semibold text-stone-700 active:bg-stone-300"
+                onClick={() => setStep(i)}
+                aria-current={i === step ? "step" : undefined}
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-full px-3 text-sm font-semibold transition-colors duration-200 ${
+                  i === step
+                    ? "bg-amber-500 text-white shadow-md shadow-amber-200"
+                    : i < step
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-white text-stone-400 ring-1 ring-stone-200"
+                }`}
               >
-                🗑 New bill
+                <span
+                  aria-hidden="true"
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                    i === step ? "bg-white/25" : i < step ? "bg-amber-200" : "bg-stone-100"
+                  }`}
+                >
+                  {i < step ? "✓" : i + 1}
+                </span>
+                {label}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <section key={step} className="animate-step">
+        {step === 0 && (
+          <ItemsStep
+            mode="scan"
+            people={people}
+            items={items}
+            currency={currency}
+            onChange={setItems}
+            onScanned={handleScanned}
+            getBillVersion={() => billVersionRef.current}
+            scanCheck={scanCheck}
+            onScanCheck={setScanCheck}
+          />
+        )}
+        {step === 1 && (
+          <div className="space-y-6">
+            <PeopleStep people={people} onChange={setPeople} />
+            {people.length > 0 && (
+              <ItemsStep
+                mode="assign"
+                people={people}
+                items={items}
+                currency={currency}
+                onChange={setItems}
+                onScanned={handleScanned}
+                getBillVersion={() => billVersionRef.current}
+                scanCheck={scanCheck}
+                onScanCheck={setScanCheck}
+              />
+            )}
+            <ExtrasStep extras={extras} currency={currency} onChange={setExtras} />
+          </div>
+        )}
+        {step === 2 && (
+          <>
+            <ResultsStep people={people} items={items} extras={extras} currency={currency} />
+
+            <div className="mt-5 space-y-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={copySummary}
+                  className={`${btn} flex-1 bg-stone-800 text-white shadow-md shadow-stone-300 hover:bg-stone-700`}
+                >
+                  {copied ? "✓ Copied!" : "📋 Copy summary"}
+                </button>
+                {canShare && (
+                  <button
+                    onClick={shareSummary}
+                    className={`${btn} bg-white text-stone-800 shadow-sm ring-1 ring-stone-200 hover:bg-stone-50`}
+                  >
+                    ↗ Share
+                  </button>
+                )}
+              </div>
+              <p role="status" className="min-h-5 text-center text-sm text-stone-500">
+                {copied ? "Paste it in Zalo or Messenger." : ""}
+              </p>
+
+              {confirmingNewBill ? (
+                <div role="alertdialog" aria-labelledby="new-bill-q" className="rounded-3xl border border-red-200 bg-red-50 p-4">
+                  <p id="new-bill-q" className="mb-3 font-semibold text-red-700">
+                    Start a new bill? The current one will be cleared.
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={newBill} className={`${btn} flex-1 bg-red-600 text-white hover:bg-red-700`}>
+                      Yes, clear it
+                    </button>
+                    <button
+                      onClick={() => setConfirmingNewBill(false)}
+                      className={`${btn} flex-1 bg-white text-stone-600 ring-1 ring-stone-300`}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmingNewBill(true)}
+                  className={`${btn} w-full bg-transparent text-stone-500 hover:bg-stone-100`}
+                >
+                  Start a new bill
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* Bottom navigation — big tap targets for mobile */}
+      <nav aria-label="Step navigation" className="fixed bottom-0 left-0 right-0 border-t border-stone-200/70 bg-white/85 backdrop-blur">
+        <div className="mx-auto max-w-md px-4 pt-2 pb-3">
+          {nextHint && <p className="mb-2 text-center text-xs text-stone-500">{nextHint}</p>}
+          <div className="flex gap-3">
+            <button
+              onClick={() => setStep((s) => Math.max(0, s - 1))}
+              disabled={step === 0}
+              className={`${btn} flex-1 bg-stone-100 text-lg text-stone-700 hover:bg-stone-200`}
+            >
+              ← Back
+            </button>
+            {step < STEPS.length - 1 && (
+              <button
+                onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
+                disabled={!canNext}
+                className={`${btn} flex-[2] bg-amber-500 text-lg font-bold text-white shadow-md shadow-amber-200 hover:bg-amber-600`}
+              >
+                {step === 0 ? "Assign →" : "See results →"}
               </button>
             )}
           </div>
-        </>
-      )}
-
-      {/* Bottom navigation — big tap targets for mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 border-t border-stone-200 bg-amber-50/95 backdrop-blur">
-        <div className="mx-auto flex max-w-md gap-3 px-4 py-3">
-          <button
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
-            disabled={step === 0}
-            className="flex-1 rounded-2xl bg-stone-200 px-4 py-4 text-lg font-semibold disabled:opacity-40"
-          >
-            ← Back
-          </button>
-          <button
-            onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
-            disabled={!canNext}
-            className="flex-[2] rounded-2xl bg-amber-500 px-4 py-4 text-lg font-bold text-white active:bg-amber-600 disabled:opacity-40"
-          >
-            {step === STEPS.length - 1 ? "Done ✓" : "Next →"}
-          </button>
         </div>
       </nav>
     </main>

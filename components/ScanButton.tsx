@@ -77,14 +77,23 @@ export default function ScanButton({ onScanned, getBillVersion }: Props) {
         type="button"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
-        className="w-full rounded-2xl bg-stone-800 px-4 py-4 text-lg font-bold text-white active:bg-stone-700 disabled:opacity-50"
+        aria-busy={busy}
+        className="flex min-h-14 w-full items-center justify-center gap-2 rounded-3xl bg-gradient-to-br from-amber-400 to-orange-500 px-4 py-4 text-lg font-bold text-white shadow-lg shadow-orange-200 transition duration-150 hover:brightness-105 active:scale-[0.98] disabled:opacity-60"
       >
-        {busy ? "Reading receipt…" : "📷 Scan receipt"}
+        {busy ? (
+          <>
+            <span aria-hidden="true" className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            Reading receipt…
+          </>
+        ) : (
+          <>📷 Scan receipt</>
+        )}
       </button>
       {error && (
-        <p className="mt-2 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-red-700">
-          {error}
-        </p>
+        <div role="alert" className="mt-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
+          <p className="font-semibold">Hmm, that scan didn't work.</p>
+          <p>{error}</p>
+        </div>
       )}
     </div>
   );

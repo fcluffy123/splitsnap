@@ -1,12 +1,51 @@
 @import "tailwindcss";
 
+:root {
+  --bg: #fffbf5;
+  --ink: #1c1917;
+  --accent: #f59e0b;
+}
+
 html,
 body {
   min-height: 100%;
 }
 
 body {
-  background-color: #fffbeb; /* warm amber-50 */
-  color: #1c1917; /* stone-900 */
+  background: radial-gradient(1200px 600px at 50% -200px, #fef3c7 0%, var(--bg) 60%) fixed;
+  color: var(--ink);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Visible keyboard focus everywhere (unlayered, so it wins over utilities). */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.animate-step {
+  animation: step-in 220ms ease-out both;
+}
+
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

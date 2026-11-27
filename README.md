@@ -26,17 +26,16 @@ npm run build   # production build
 
 ## How it works
 
-1. **People** — add at least 2 people (colored chips)
-2. **Items** — scan a receipt photo (compressed < 1 MB in the browser, sent to Gemini as JSON) or add items manually; tap people chips under each item to assign it (shared items split evenly)
-3. **Extras** — tax %, service charge %, tip (% or fixed amount), split **proportionally to each person's subtotal**
-4. **Results** — one card per person; unassigned items are flagged; the first person absorbs the rounding leftover so totals sum exactly to the bill total
+1. **Scan** — scan a receipt photo (compressed < 1 MB in the browser, sent to Gemini as JSON) or add items manually
+2. **Assign** — add at least 2 people, tap people chips under each item (shared items split evenly), and set tax %, service charge %, tip (% or fixed amount) — split **proportionally to each person's subtotal**
+3. **Results** — a bill-total card plus one row per person (tap to see their items and shares); copy or share the summary; unassigned items are flagged; the first person with items absorbs the rounding leftover so totals sum exactly to the bill total
 
 All money math lives in `lib/split.ts` (pure functions, unit-tested).
 
 ## Project structure
 
 ```
-app/page.tsx            4-step wizard + localStorage persistence
+app/page.tsx            3-step wizard (Scan → Assign → Results) + localStorage persistence
 app/api/scan/route.ts   Gemini receipt scan (server-side, key stays secret)
 components/             PeopleStep, ItemsStep, ExtrasStep, ResultsStep, ScanButton
 lib/split.ts            all money math + currency formatting

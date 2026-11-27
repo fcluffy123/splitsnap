@@ -1,6 +1,6 @@
 "use client";
 
-// Step 1: add the people splitting the bill (minimum 2).
+// Add the people splitting the bill (minimum 2). Shown on the Assign step.
 import type { Person } from "@/lib/split";
 
 // Fixed palette so chips always look distinct.
@@ -28,10 +28,11 @@ export default function PeopleStep({ people, onChange }: Props) {
   };
 
   return (
-    <div className="space-y-4">
-      <p className="text-stone-600">
-        Who's splitting this bill? Add at least 2 people.
-      </p>
+    <div className="space-y-3 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-stone-100">
+      <div>
+        <h2 className="text-lg font-bold">Who's at the table?</h2>
+        <p className="text-sm text-stone-500">Add at least 2 people.</p>
+      </div>
 
       <form
         onSubmit={(e) => {
@@ -42,41 +43,46 @@ export default function PeopleStep({ people, onChange }: Props) {
         }}
         className="flex gap-2"
       >
+        <label htmlFor="person-name" className="sr-only">Person's name</label>
         <input
+          id="person-name"
           name="name"
           placeholder="Name (e.g. Lan)"
-          className="flex-1 rounded-xl border border-stone-300 bg-white px-4 py-3 text-lg outline-none focus:border-amber-500"
+          autoComplete="off"
+          className="min-h-11 flex-1 rounded-xl border border-stone-200 bg-stone-50 px-4 py-2 text-lg transition-colors focus:border-amber-400 focus:bg-white"
         />
         <button
           type="submit"
-          className="rounded-xl bg-amber-500 px-5 py-3 text-lg font-semibold text-white active:bg-amber-600"
+          className="min-h-11 rounded-xl bg-amber-500 px-5 font-semibold text-white transition active:scale-[0.97] hover:bg-amber-600"
         >
           Add
         </button>
       </form>
 
-      <div className="flex flex-wrap gap-2">
-        {people.map((p) => (
-          <span
-            key={p.id}
-            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-white text-base font-medium"
-            style={{ backgroundColor: p.color }}
-          >
-            {p.name}
-            <button
-              onClick={() => removePerson(p.id)}
-              aria-label={`Remove ${p.name}`}
-              className="ml-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/20 text-sm leading-none"
+      {people.length > 0 && (
+        <ul className="flex flex-wrap gap-2" aria-label="People">
+          {people.map((p) => (
+            <li
+              key={p.id}
+              className="inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-4 text-base font-medium text-white shadow-sm"
+              style={{ backgroundColor: p.color }}
             >
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
+              {p.name}
+              <button
+                onClick={() => removePerson(p.id)}
+                aria-label={`Remove ${p.name}`}
+                className="flex h-11 w-11 items-center justify-center rounded-full text-lg leading-none transition-colors hover:bg-black/15"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {people.length < 2 && (
-        <p className="rounded-xl bg-amber-100 px-4 py-3 text-amber-800">
-          Add {2 - people.length} more {people.length === 1 ? "person" : "people"} to continue.
+        <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          👋 Add {2 - people.length} more {people.length === 1 ? "person" : "people"} to split the bill.
         </p>
       )}
     </div>
