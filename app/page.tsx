@@ -203,7 +203,7 @@ export default function Home() {
         {step === 3 && (
           <>
             <ResultsStep people={people} items={items} extras={extras} currency={currency} onGoTo={goTo} />
-            <SummaryActions canShare={canShare} onShare={shareSummary} onNewBill={newBill} />
+            <SummaryActions canShare={canShare && people.length > 0 && items.length > 0} onShare={shareSummary} onNewBill={newBill} />
           </>
         )}
       </section>
