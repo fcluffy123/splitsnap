@@ -62,6 +62,8 @@ export default function ScanButton({ onScanned, getBillVersion }: Props) {
     }
   };
 
+  const pick = () => inputRef.current?.click();
+
   return (
     <div>
       {/* capture="environment" hints iOS Safari to open the rear camera directly */}
@@ -76,16 +78,44 @@ export default function ScanButton({ onScanned, getBillVersion }: Props) {
       <button
         type="button"
         disabled={busy}
-        onClick={() => inputRef.current?.click()}
-        className="w-full rounded-2xl bg-stone-800 px-4 py-4 text-lg font-bold text-white active:bg-stone-700 disabled:opacity-50"
+        aria-busy={busy}
+        onClick={pick}
+        className="group relative flex min-h-16 w-full items-center justify-center gap-3 overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 px-5 text-lg font-bold text-white shadow-lift transition duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:cursor-wait"
       >
-        {busy ? "Reading receipt…" : "📷 Scan receipt"}
+        {busy ? (
+          <>
+            <span aria-hidden className="h-5 w-5 rounded-full border-[3px] border-white/40 border-t-white motion-safe:animate-spin" />
+            Reading receipt…
+          </>
+        ) : (
+          <>
+            <span aria-hidden className="text-2xl transition-transform duration-300 group-hover:rotate-[-8deg] group-hover:scale-110">
+              📷
+            </span>
+            Scan a receipt
+          </>
+        )}
+        {/* Soft shine sweeping across while busy */}
+        {busy && (
+          <span aria-hidden className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent motion-safe:animate-pulse" />
+        )}
       </button>
-      {error && (
-        <p className="mt-2 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-red-700">
-          {error}
-        </p>
-      )}
+
+      <div aria-live="polite">
+        {error && (
+          <div className="motion-safe:animate-step-in mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">
+            <p className="font-semibold">😕 Couldn't read that receipt</p>
+            <p className="mt-1 text-sm">{error}</p>
+            <button
+              type="button"
+              onClick={pick}
+              className="mt-2 min-h-11 rounded-xl bg-white px-4 text-sm font-semibold text-red-700 ring-1 ring-red-200 active:bg-red-100"
+            >
+              Try another photo
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

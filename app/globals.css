@@ -1,12 +1,71 @@
 @import "tailwindcss";
 
+/* Design tokens: one brand color (indigo) + warm accent, used everywhere as
+   bg-brand-600, text-accent-500, etc. Change them here to re-theme the app. */
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-900: #312e81;
+  --color-accent-100: #fef3c7;
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+
+  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.04), 0 4px 16px rgb(28 25 23 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(79 70 229 / 0.12), 0 8px 24px rgb(79 70 229 / 0.22);
+
+  --animate-step-in: step-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-row-in: row-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pop: pop 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  @keyframes step-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes row-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.04); }
+    100% { transform: scale(1); }
+  }
+}
+
 html,
 body {
   min-height: 100%;
 }
 
 body {
-  background-color: #fffbeb; /* warm amber-50 */
+  background:
+    radial-gradient(1200px 400px at 50% -200px, var(--color-brand-100), transparent),
+    #fafaf9; /* stone-50 */
+  background-attachment: fixed;
   color: #1c1917; /* stone-900 */
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Visible keyboard focus everywhere (mouse/touch taps don't show it). */
+:focus-visible {
+  outline: 3px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+/* Respect the OS "reduce motion" setting: kill animations and transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
