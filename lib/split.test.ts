@@ -130,16 +130,27 @@ test("summary text keeps cents in the USD total", () => {
   assert.ok(text.includes("Total: $4.25"), text); // 0% extras → cents preserved
 });
 
-test("summary total matches the per-person shares, not the raw total", () => {
-  // $61.40 + 7.5% tax = $66.005: raw total formats as $66.01 but the
-  // shares (rounded to cents) sum to $66.00 — the summary must show $66.00.
+test("summary total matches the per-person shares", () => {
+  // $61.40 + 7.5% tax = $66.005: a half-cent. The total shown in the summary
+  // must be exactly what the per-person shares add up to — no drift either way.
   const taxExtras = { taxPercent: 7.5, servicePercent: 0, tipPercent: 0, tipFixed: 0 };
   const items = [item("i1", "Dinner", 61.4, 1, ["p1", "p2"])];
   const r = splitBill([lan, minh], items, taxExtras, 0.01);
   const sharesSum = r.people.reduce((s, b) => s + b.total, 0);
-  assert.equal(sharesSum, 66.0); // sanity: shares sum to the rounded total
+  assert.equal(sharesSum, r.grandTotal); // shares and total agree
   const text = buildSummaryText(r, "USD");
-  assert.ok(text.includes("Total: $66.00"), text);
+  assert.ok(text.includes(`Total: $66.01`), text); // half-cent rounds up
+});
+
+test("grand total rounds half-cents up (no float drift)", () => {
+  // $17 + 7.5% tax = $18.275 exactly. Binary float makes 18.275/0.01 land
+  // just BELOW the rounding threshold, which used to report $18.27 — a cent
+  // lower than the displayed subtotal ($17.00) + tax ($1.28) = $18.28.
+  const taxExtras = { taxPercent: 7.5, servicePercent: 0, tipPercent: 0, tipFixed: 0 };
+  const items = [item("i1", "Dinner", 17, 1, ["p1", "p2"])];
+  const r = splitBill([lan, minh], items, taxExtras, 0.01);
+  assert.equal(r.grandTotal, 18.28);
+  assert.equal(r.tax, 1.28); // displayed parts must add up to the total
 });
 
 test("summary text warns when items are unassigned", () => {

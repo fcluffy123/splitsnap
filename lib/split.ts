@@ -61,8 +61,15 @@ export type SplitResult = {
 };
 
 // Round to the smallest currency unit. For VND that's 1; for USD/EUR, 1 cent.
+// The epsilon nudge corrects binary-float error: e.g. 18.275/0.01 evaluates
+// to 1827.49999…8, which plain Math.round would wrongly round DOWN to 18.27
+// even though the exact half-cent should round UP to 18.28.
 export function roundMoney(value: number, smallestUnit = 1): number {
-  return Math.round(value / smallestUnit) * smallestUnit;
+  const units = value / smallestUnit;
+  return (
+    Math.round(units + Number.EPSILON * Math.max(1, Math.abs(units))) *
+    smallestUnit
+  );
 }
 
 /**
@@ -151,14 +158,15 @@ export function splitBill(
   }
 
   // Round the grand total so it matches what the per-person shares sum to
-  // (the first person absorbs the leftover below). Consumers — the Results
-  // screen and the copy summary — must never show a raw half-cent total.
+  // (the first person absorbs the leftover below). Tax/service/tip are also
+  // rounded so the displayed parts add up to the displayed total. Consumers
+  // — the Results screen and the copy summary — must never see raw values.
   return {
     people: peopleBreakdown,
     itemsSubtotal,
-    tax,
-    service,
-    tip,
+    tax: r(tax),
+    service: r(service),
+    tip: r(tip),
     grandTotal: r(grandTotal),
     unassignedItemIds,
     roundingAdjustment,
