@@ -130,6 +130,18 @@ test("summary text keeps cents in the USD total", () => {
   assert.ok(text.includes("Total: $4.25"), text); // 0% extras → cents preserved
 });
 
+test("summary total matches the per-person shares, not the raw total", () => {
+  // $61.40 + 7.5% tax = $66.005: raw total formats as $66.01 but the
+  // shares (rounded to cents) sum to $66.00 — the summary must show $66.00.
+  const taxExtras = { taxPercent: 7.5, servicePercent: 0, tipPercent: 0, tipFixed: 0 };
+  const items = [item("i1", "Dinner", 61.4, 1, ["p1", "p2"])];
+  const r = splitBill([lan, minh], items, taxExtras, 0.01);
+  const sharesSum = r.people.reduce((s, b) => s + b.total, 0);
+  assert.equal(sharesSum, 66.0); // sanity: shares sum to the rounded total
+  const text = buildSummaryText(r, "USD");
+  assert.ok(text.includes("Total: $66.00"), text);
+});
+
 test("summary text warns when items are unassigned", () => {
   const items = [item("i1", "Mystery", 100000, 1, [])]; // no one assigned
   const r = splitBill([lan], items, noExtras);

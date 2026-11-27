@@ -183,7 +183,14 @@ export function buildSummaryText(
   const lines = result.people.map(
     (b) => `${b.person.name}: ${formatMoney(b.total, currency)}`
   );
-  lines.push(`Total: ${formatMoney(result.grandTotal, currency)}`);
+  // Show the total the per-person shares actually add up to (the rounded
+  // grand total), not the raw grand total — otherwise the pasted total can
+  // disagree with the pasted shares by a cent.
+  const total =
+    result.people.length > 0
+      ? result.people.reduce((s, b) => s + b.total, 0)
+      : result.grandTotal;
+  lines.push(`Total: ${formatMoney(total, currency)}`);
   if (result.unassignedItemIds.length > 0) {
     lines.push(
       `⚠️ ${result.unassignedItemIds.length} item(s) not assigned to anyone — assign them in SplitSnap first.`
