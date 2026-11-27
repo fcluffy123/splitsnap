@@ -31,13 +31,13 @@ export default function SummaryActions({ canShare, onShare, onNewBill }: Props) 
           <div className="flex gap-2">
             <button
               type="button"
-              autoFocus
               onClick={onNewBill}
               className="min-h-12 flex-1 rounded-2xl bg-red-600 px-4 font-bold text-white active:bg-red-700"
             >
               Yes, clear it
             </button>
-            <button type="button" onClick={() => setConfirming(false)} className={`${secondaryBtn} flex-1 bg-white ring-1 ring-stone-200`}>
+            {/* Focus lands on Cancel, so a held/repeated key can't confirm */}
+            <button type="button" autoFocus onClick={() => setConfirming(false)} className={`${secondaryBtn} flex-1 bg-white ring-1 ring-stone-200`}>
               Cancel
             </button>
           </div>
