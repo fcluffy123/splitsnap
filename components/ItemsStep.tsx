@@ -11,25 +11,14 @@ type Props = {
   people: Person[];
   items: Item[];
   onChange: (items: Item[]) => void;
+  onScanned: (receipt: ScannedReceipt) => void;
   scanCheck: { scannedTotal: number; itemsTotal: number } | null;
   onScanCheck: (check: { scannedTotal: number; itemsTotal: number } | null) => void;
 };
 
-export default function ItemsStep({ people, items, onChange, scanCheck, onScanCheck }: Props) {
-  // Load scanned items into the editable list (so mistakes can be fixed),
-  // and remember the scanned total for the "scanned vs items" check.
-  const handleScanned = (receipt: ScannedReceipt) => {
-    const scanned: Item[] = receipt.items.map((it, i) => ({
-      id: `s${Date.now()}${i}`,
-      name: it.name,
-      price: it.price,
-      qty: it.qty,
-      assignedTo: [],
-    }));
-    onChange([...items, ...scanned]);
-    const itemsTotal = scanned.reduce((s, it) => s + it.price * it.qty, 0);
-    onScanCheck({ scannedTotal: receipt.total, itemsTotal });
-  };
+export default function ItemsStep({ people, items, onChange, onScanned, scanCheck, onScanCheck }: Props) {
+  // The scanned receipt is handed up to the page (which owns the state and
+  // guards against scans finishing after a "New bill" reset).
 
   const addItem = (name: string, price: string, qty: string) => {
     const trimmed = name.trim();
@@ -58,7 +47,7 @@ export default function ItemsStep({ people, items, onChange, scanCheck, onScanCh
     <div className="space-y-4">
       <p className="text-stone-600">Add each item, then tap who had it.</p>
 
-      <ScanButton onScanned={handleScanned} />
+      <ScanButton onScanned={onScanned} />
 
       {/* Sanity check: does the scanned bill total match the sum of scanned items? */}
       {scanCheck && (

@@ -183,6 +183,11 @@ export function buildSummaryText(
   const lines = result.people.map(
     (b) => `${b.person.name}: ${formatMoney(b.total, currency)}`
   );
-  lines.push(`Total: ${formatMoney(roundMoney(result.grandTotal), currency)}`);
+  lines.push(`Total: ${formatMoney(result.grandTotal, currency)}`);
+  if (result.unassignedItemIds.length > 0) {
+    lines.push(
+      `⚠️ ${result.unassignedItemIds.length} item(s) not assigned to anyone — assign them in SplitSnap first.`
+    );
+  }
   return lines.join("\n");
 }

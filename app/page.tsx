@@ -4,7 +4,7 @@
 // All state lives here and is mirrored to localStorage so a refresh
 // doesn't lose the current bill. Phase 3 adds a currency selector,
 // a copy-summary button and a new-bill button.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PeopleStep from "@/components/PeopleStep";
 import ItemsStep from "@/components/ItemsStep";
 import ExtrasStep from "@/components/ExtrasStep";
@@ -19,6 +19,7 @@ import {
   type Item,
   type Extras,
 } from "@/lib/split";
+import type { ScannedReceipt } from "@/lib/scan";
 
 const STEPS = ["People", "Items", "Extras", "Results"] as const;
 const STORAGE_KEY = "splitsnap-bill-v1";
@@ -42,6 +43,9 @@ export default function Home() {
   const [hydrated, setHydrated] = useState(false); // false until localStorage is read
   const [copied, setCopied] = useState(false);
   const [confirmingNewBill, setConfirmingNewBill] = useState(false);
+  // Increments on every "New bill" reset, so a scan that was still running
+  // when the bill was cleared can be detected and dropped.
+  const billVersionRef = useRef(0);
 
   // Load saved bill once, on mount (client only).
   useEffect(() => {
@@ -89,6 +93,8 @@ export default function Home() {
   };
 
   const newBill = () => {
+    // Bump the version first so any scan still in flight is dropped.
+    billVersionRef.current += 1;
     // Clears everything (state + localStorage) and returns to step 1.
     setPeople([]);
     setItems([]);
@@ -98,6 +104,29 @@ export default function Home() {
     setStep(0);
     setConfirmingNewBill(false);
     localStorage.removeItem(STORAGE_KEY);
+  };
+
+  // Receives a scanned receipt. Uses functional updates + the bill version so
+  // a scan that finishes AFTER "New bill" was pressed is ignored — otherwise
+  // the old receipt's items would be written into the freshly cleared bill.
+  const handleScanned = (receipt: ScannedReceipt) => {
+    const version = billVersionRef.current;
+    setItems((prev) => {
+      if (billVersionRef.current !== version) return prev; // bill was reset meanwhile
+      const scanned: Item[] = receipt.items.map((it, i) => ({
+        id: `s${Date.now()}${i}`,
+        name: it.name,
+        price: it.price,
+        qty: it.qty,
+        assignedTo: [],
+      }));
+      return [...prev, ...scanned];
+    });
+    setScanCheck(() => {
+      if (billVersionRef.current !== version) return null; // bill was reset meanwhile
+      const itemsTotal = receipt.items.reduce((s, it) => s + it.price * it.qty, 0);
+      return { scannedTotal: receipt.total, itemsTotal };
+    });
   };
 
   if (!hydrated) return null; // avoid flashing empty state before localStorage loads
@@ -153,6 +182,7 @@ export default function Home() {
           people={people}
           items={items}
           onChange={setItems}
+          onScanned={handleScanned}
           scanCheck={scanCheck}
           onScanCheck={setScanCheck}
         />

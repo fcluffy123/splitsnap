@@ -122,3 +122,17 @@ test("summary text lists each person and the total", () => {
   assert.ok(text.includes("Minh: 200.000đ"));
   assert.ok(text.includes("Total: 300.000đ"));
 });
+
+test("summary text keeps cents in the USD total", () => {
+  const items = [item("i1", "Coffee", 4.25, 1, ["p1"])];
+  const r = splitBill([lan], items, noExtras, 0.01);
+  const text = buildSummaryText(r, "USD");
+  assert.ok(text.includes("Total: $4.25"), text); // 0% extras → cents preserved
+});
+
+test("summary text warns when items are unassigned", () => {
+  const items = [item("i1", "Mystery", 100000, 1, [])]; // no one assigned
+  const r = splitBill([lan], items, noExtras);
+  const text = buildSummaryText(r, "VND");
+  assert.ok(text.includes("not assigned"), text);
+});
