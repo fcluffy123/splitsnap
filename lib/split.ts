@@ -150,13 +150,16 @@ export function splitBill(
     peopleBreakdown[0].total += roundingAdjustment;
   }
 
+  // Round the grand total so it matches what the per-person shares sum to
+  // (the first person absorbs the leftover below). Consumers — the Results
+  // screen and the copy summary — must never show a raw half-cent total.
   return {
     people: peopleBreakdown,
     itemsSubtotal,
     tax,
     service,
     tip,
-    grandTotal,
+    grandTotal: r(grandTotal),
     unassignedItemIds,
     roundingAdjustment,
   };
