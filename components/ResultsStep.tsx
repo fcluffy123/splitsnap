@@ -2,17 +2,25 @@
 
 // Step 4: one card per person — items, subtotal, share of tax/service/tip,
 // and final total. Warns about unassigned items.
-import { splitBill, formatMoney, type Extras, type Item, type Person } from "@/lib/split";
+import {
+  splitBill,
+  formatMoney,
+  smallestUnit,
+  type Currency,
+  type Extras,
+  type Item,
+  type Person,
+} from "@/lib/split";
 
 type Props = {
   people: Person[];
   items: Item[];
   extras: Extras;
-  currency: "VND" | "USD" | "EUR";
+  currency: Currency;
 };
 
 export default function ResultsStep({ people, items, extras, currency }: Props) {
-  const result = splitBill(people, items, extras);
+  const result = splitBill(people, items, extras, smallestUnit(currency));
   const fmt = (n: number) => formatMoney(n, currency);
 
   return (

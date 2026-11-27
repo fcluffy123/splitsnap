@@ -1,20 +1,27 @@
 "use client";
 
-// SplitSnap main screen — Phase 1 (manual splitter).
-// A simple 4-step wizard: People → Items → Extras → Results.
+// SplitSnap main screen — 4-step wizard: People → Items → Extras → Results.
 // All state lives here and is mirrored to localStorage so a refresh
-// doesn't lose the current bill.
+// doesn't lose the current bill. Phase 3 adds a currency selector,
+// a copy-summary button and a new-bill button.
 import { useEffect, useState } from "react";
 import PeopleStep from "@/components/PeopleStep";
 import ItemsStep from "@/components/ItemsStep";
 import ExtrasStep from "@/components/ExtrasStep";
 import ResultsStep from "@/components/ResultsStep";
-import type { Person, Item, Extras } from "@/lib/split";
+import {
+  buildSummaryText,
+  splitBill,
+  smallestUnit,
+  CURRENCIES,
+  type Currency,
+  type Person,
+  type Item,
+  type Extras,
+} from "@/lib/split";
 
 const STEPS = ["People", "Items", "Extras", "Results"] as const;
 const STORAGE_KEY = "splitsnap-bill-v1";
-
-type ScanCheck = { scannedTotal: number; itemsTotal: number } | null;
 
 const DEFAULT_EXTRAS: Extras = {
   taxPercent: 10,
@@ -23,13 +30,18 @@ const DEFAULT_EXTRAS: Extras = {
   tipFixed: 0,
 };
 
+type ScanCheck = { scannedTotal: number; itemsTotal: number } | null;
+
 export default function Home() {
   const [step, setStep] = useState(0);
   const [people, setPeople] = useState<Person[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [extras, setExtras] = useState<Extras>(DEFAULT_EXTRAS);
+  const [currency, setCurrency] = useState<Currency>("VND");
   const [scanCheck, setScanCheck] = useState<ScanCheck>(null);
   const [hydrated, setHydrated] = useState(false); // false until localStorage is read
+  const [copied, setCopied] = useState(false);
+  const [confirmingNewBill, setConfirmingNewBill] = useState(false);
 
   // Load saved bill once, on mount (client only).
   useEffect(() => {
@@ -41,6 +53,7 @@ export default function Home() {
         if (Array.isArray(saved.items)) setItems(saved.items);
         if (saved.extras) setExtras({ ...DEFAULT_EXTRAS, ...saved.extras });
         if (saved.scanCheck) setScanCheck(saved.scanCheck);
+        if (saved.currency) setCurrency(saved.currency);
       }
     } catch {
       // Corrupt saved data — start fresh.
@@ -53,23 +66,66 @@ export default function Home() {
     if (!hydrated) return;
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ people, items, extras, scanCheck })
+      JSON.stringify({ people, items, extras, scanCheck, currency })
     );
-  }, [people, items, extras, scanCheck, hydrated]);
+  }, [people, items, extras, scanCheck, currency, hydrated]);
 
   const canNext =
     (step === 0 && people.length >= 2) ||
     (step === 1 && items.length >= 1) ||
     step >= 2;
 
+  const copySummary = async () => {
+    const result = splitBill(people, items, extras, smallestUnit(currency));
+    const text = buildSummaryText(result, currency);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocked (e.g. non-HTTPS) — fall back to a selectable textarea prompt
+      window.prompt("Copy your summary:", text);
+    }
+  };
+
+  const newBill = () => {
+    // Clears everything (state + localStorage) and returns to step 1.
+    setPeople([]);
+    setItems([]);
+    setExtras(DEFAULT_EXTRAS);
+    setScanCheck(null);
+    setCurrency("VND");
+    setStep(0);
+    setConfirmingNewBill(false);
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
   if (!hydrated) return null; // avoid flashing empty state before localStorage loads
 
   return (
-    <main className="mx-auto max-w-md px-4 py-6 pb-28">
-      <header className="mb-6 text-center">
+    <main className="mx-auto max-w-md px-4 py-6 pb-32">
+      <header className="mb-4 text-center">
         <h1 className="text-3xl font-extrabold tracking-tight">SplitSnap</h1>
         <p className="text-stone-500">Split the bill fairly, in seconds.</p>
       </header>
+
+      {/* Currency selector */}
+      <div className="mb-4 flex items-center justify-center gap-2">
+        <span className="text-sm text-stone-500">Currency:</span>
+        {CURRENCIES.map((c) => (
+          <button
+            key={c}
+            onClick={() => setCurrency(c)}
+            className={`rounded-full px-4 py-2 text-sm font-bold ${
+              currency === c
+                ? "bg-stone-800 text-white"
+                : "bg-stone-100 text-stone-500"
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
 
       {/* Step indicator */}
       <ol className="mb-6 flex justify-between gap-1">
@@ -101,9 +157,50 @@ export default function Home() {
           onScanCheck={setScanCheck}
         />
       )}
-      {step === 2 && <ExtrasStep extras={extras} onChange={setExtras} />}
+      {step === 2 && <ExtrasStep extras={extras} currency={currency} onChange={setExtras} />}
       {step === 3 && (
-        <ResultsStep people={people} items={items} extras={extras} currency="VND" />
+        <>
+          <ResultsStep people={people} items={items} extras={extras} currency={currency} />
+
+          {/* Phase 3 actions */}
+          <div className="mt-4 space-y-3">
+            <button
+              onClick={copySummary}
+              className="w-full rounded-2xl bg-stone-800 px-4 py-4 text-lg font-bold text-white active:bg-stone-700"
+            >
+              {copied ? "✓ Copied! Paste it in Zalo/Messenger" : "📋 Copy summary"}
+            </button>
+
+            {confirmingNewBill ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                <p className="mb-3 font-semibold text-red-700">
+                  Start a new bill? The current one will be cleared.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={newBill}
+                    className="flex-1 rounded-xl bg-red-600 px-4 py-3 font-bold text-white active:bg-red-700"
+                  >
+                    Yes, clear it
+                  </button>
+                  <button
+                    onClick={() => setConfirmingNewBill(false)}
+                    className="flex-1 rounded-xl bg-white px-4 py-3 font-semibold text-stone-600 border border-stone-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingNewBill(true)}
+                className="w-full rounded-2xl bg-stone-200 px-4 py-4 text-lg font-semibold text-stone-700 active:bg-stone-300"
+              >
+                🗑 New bill
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {/* Bottom navigation — big tap targets for mobile */}

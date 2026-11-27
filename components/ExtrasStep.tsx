@@ -2,14 +2,16 @@
 
 // Step 3: tax %, service charge % and tip (% or fixed amount).
 // These are split in proportion to each person's subtotal (see lib/split.ts).
-import type { Extras } from "@/lib/split";
+import type { Currency, Extras } from "@/lib/split";
 
 type Props = {
   extras: Extras;
+  currency: Currency;
   onChange: (extras: Extras) => void;
 };
 
-export default function ExtrasStep({ extras, onChange }: Props) {
+export default function ExtrasStep({ extras, currency, onChange }: Props) {
+  const fixedSuffix = currency === "VND" ? "đ" : currency === "USD" ? "$" : "€";
   const set = (patch: Partial<Extras>) => onChange({ ...extras, ...patch });
 
   const num = (v: string) => {
@@ -50,7 +52,7 @@ export default function ExtrasStep({ extras, onChange }: Props) {
 
       <div className="grid grid-cols-2 gap-3">
         {field("Tip", extras.tipPercent, (n) => set({ tipPercent: n, tipFixed: 0 }), "%")}
-        {field("…or fixed tip", extras.tipFixed, (n) => set({ tipFixed: n, tipPercent: 0 }), "đ")}
+        {field("…or fixed tip", extras.tipFixed, (n) => set({ tipFixed: n, tipPercent: 0 }), fixedSuffix)}
       </div>
       <p className="text-sm text-stone-500">
         Tip: fill in either the % or the fixed amount — the other one is ignored.

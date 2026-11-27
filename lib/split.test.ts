@@ -6,6 +6,7 @@ import {
   splitBill,
   formatMoney,
   buildSummaryText,
+  smallestUnit,
   type Person,
   type Item,
 } from "./split.ts";
@@ -90,6 +91,24 @@ test("VND formatting uses dot separators and no decimals", () => {
 
 test("USD formatting uses $ and cents", () => {
   assert.equal(formatMoney(12.5, "USD"), "$12.50");
+});
+
+test("EUR formatting uses € symbol and 2 decimals", () => {
+  const s = formatMoney(1234.5, "EUR");
+  assert.ok(s.startsWith("€"));
+  assert.ok(s.endsWith("50"));
+});
+
+test("smallest unit: VND rounds to 1, USD/EUR to cents", () => {
+  assert.equal(smallestUnit("VND"), 1);
+  assert.equal(smallestUnit("USD"), 0.01);
+  // A USD bill rounds leftovers to cents and still sums exactly
+  const a: Person = { id: "a", name: "A", color: "#111" };
+  const b: Person = { id: "b", name: "B", color: "#222" };
+  const items = [item("i1", "Snack", 0.33, 1, ["a", "b"])];
+  const r = splitBill([a, b], items, noExtras, 0.01);
+  const sum = r.people.reduce((s, p) => s + p.total, 0);
+  assert.ok(Math.abs(sum - 0.33) < 1e-9);
 });
 
 test("summary text lists each person and the total", () => {

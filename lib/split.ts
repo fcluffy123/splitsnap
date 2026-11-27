@@ -6,6 +6,15 @@
 // floating-point rounding drift. We keep numbers as plain JS numbers and
 // round at well-defined points only.
 
+export type Currency = "VND" | "USD" | "EUR";
+
+export const CURRENCIES: Currency[] = ["VND", "USD", "EUR"];
+
+// Smallest unit the currency uses: VND has no decimals (1đ), USD/EUR use cents.
+export function smallestUnit(currency: Currency): number {
+  return currency === "VND" ? 1 : 0.01;
+}
+
 export type Person = {
   id: string;
   name: string;
@@ -154,10 +163,7 @@ export function splitBill(
 }
 
 /** Format a number as currency. VND: 125000 -> "125.000đ", USD/EUR: 12.5 -> "$12.50". */
-export function formatMoney(
-  amount: number,
-  currency: "VND" | "USD" | "EUR"
-): string {
+export function formatMoney(amount: number, currency: Currency): string {
   if (currency === "VND") {
     // Dot as thousands separator, no decimals, suffix đ.
     return `${Math.round(amount).toLocaleString("de-DE")}đ`;
@@ -172,7 +178,7 @@ export function formatMoney(
 /** Build the plain-text summary for copying into chat apps. */
 export function buildSummaryText(
   result: SplitResult,
-  currency: "VND" | "USD" | "EUR"
+  currency: Currency
 ): string {
   const lines = result.people.map(
     (b) => `${b.person.name}: ${formatMoney(b.total, currency)}`
