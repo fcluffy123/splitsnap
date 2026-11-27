@@ -17,7 +17,8 @@ type Props = {
 };
 
 export default function ScanButton({ onScanned, getBillVersion }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const libraryRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,20 +59,32 @@ export default function ScanButton({ onScanned, getBillVersion }: Props) {
       );
     } finally {
       setBusy(false);
-      if (inputRef.current) inputRef.current.value = ""; // allow re-picking the same file
+      // allow re-picking the same file
+      if (cameraRef.current) cameraRef.current.value = "";
+      if (libraryRef.current) libraryRef.current.value = "";
     }
   };
 
-  const pick = () => inputRef.current?.click();
+  const pick = (ref: React.RefObject<HTMLInputElement | null>) =>
+    ref.current?.click();
 
   return (
     <div>
-      {/* capture="environment" hints iOS Safari to open the rear camera directly */}
+      {/* capture="environment" hints iOS Safari to open the rear camera directly.
+          Without capture, the picker lets the user choose the camera OR their
+          photo library, so this second input is for gallery uploads. */}
       <input
-        ref={inputRef}
+        ref={cameraRef}
         type="file"
         accept="image/*"
         capture="environment"
+        className="hidden"
+        onChange={(e) => handleFile(e.target.files?.[0])}
+      />
+      <input
+        ref={libraryRef}
+        type="file"
+        accept="image/*"
         className="hidden"
         onChange={(e) => handleFile(e.target.files?.[0])}
       />
@@ -79,7 +92,7 @@ export default function ScanButton({ onScanned, getBillVersion }: Props) {
         type="button"
         disabled={busy}
         aria-busy={busy}
-        onClick={pick}
+        onClick={() => pick(cameraRef)}
         className="group relative flex min-h-16 w-full items-center justify-center gap-3 overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 px-5 text-lg font-bold text-white shadow-lift transition duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:cursor-wait"
       >
         {busy ? (
@@ -101,6 +114,18 @@ export default function ScanButton({ onScanned, getBillVersion }: Props) {
         )}
       </button>
 
+      {/* Upload a photo already on the device (gallery / downloads) */}
+      <button
+        type="button"
+        disabled={busy}
+        aria-busy={busy}
+        onClick={() => pick(libraryRef)}
+        className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 font-semibold text-brand-700 ring-1 ring-brand-200 transition duration-200 hover:bg-brand-50 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+      >
+        <span aria-hidden className="text-lg">🖼️</span>
+        Upload from device
+      </button>
+
       <div aria-live="polite">
         {error && (
           <div className="motion-safe:animate-step-in mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-800">
@@ -108,7 +133,7 @@ export default function ScanButton({ onScanned, getBillVersion }: Props) {
             <p className="mt-1 text-sm">{error}</p>
             <button
               type="button"
-              onClick={pick}
+              onClick={() => pick(libraryRef)}
               className="mt-2 min-h-11 rounded-xl bg-white px-4 text-sm font-semibold text-red-700 ring-1 ring-red-200 active:bg-red-100"
             >
               Try another photo
