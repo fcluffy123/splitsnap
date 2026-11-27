@@ -56,7 +56,7 @@ export type SplitResult = {
   grandTotal: number;
   unassignedItemIds: string[];
   // The bill's grand total must equal the sum of everyone's total, exactly.
-  // Any rounding leftover is placed on the first person.
+  // Any rounding leftover is placed on the first person who ordered something.
   roundingAdjustment: number;
 };
 
@@ -80,8 +80,8 @@ export function roundMoney(value: number, smallestUnit = 1): number {
  *   to each person's subtotal.
  * - Tip is either tipPercent % of the subtotal, or tipFixed, then split the
  *   same proportional way.
- * - The first person absorbs the rounding leftover so the parts sum exactly
- *   to grandTotal.
+ * - The first person with items absorbs the rounding leftover so the parts
+ *   sum exactly to grandTotal (someone who ordered nothing always pays 0).
  */
 export function splitBill(
   people: Person[],
@@ -128,8 +128,10 @@ export function splitBill(
   const rTip = r(tip);
   const exactGrand = itemsSubtotal + rTax + rService + rTip;
 
-  // Raw (unrounded) extras total, used to weight each person's share.
-  const extrasTotal = tax + service + tip;
+  // Weight each person's share by the ROUNDED extras, the same ones the
+  // grand total is built from. Weighting by the raw extras would make the
+  // per-person totals target a different bill than grandTotal.
+  const extrasTotal = rTax + rService + rTip;
 
   // Raw (unrounded) total per person: subtotal + proportional extras.
   // If the whole bill is unassigned (itemsSubtotal = 0) nobody gets extras.
@@ -148,27 +150,30 @@ export function splitBill(
         .filter((it) => it.assignedTo.includes(p.id))
         .map((it) => ({ item: it, share: (it.price * it.qty) / it.assignedTo.length })),
       subtotal,
-      taxShare: r(tax * prop),
-      serviceShare: r(service * prop),
-      tipShare: r(tip * prop),
+      taxShare: r(rTax * prop),
+      serviceShare: r(rService * prop),
+      tipShare: r(rTip * prop),
       total: r(rawTotal(p.id)),
     };
   });
 
-  // First person absorbs the rounding leftover so the parts sum exactly
-  // to the rounded grand total.
+  // The first person who ordered something absorbs the rounding leftover so
+  // the parts sum exactly to the rounded grand total. Falls back to the first
+  // person only when nobody has items (then every total is 0 anyway).
   let roundingAdjustment = 0;
   if (peopleBreakdown.length > 0) {
-    const othersSum = peopleBreakdown
-      .slice(1)
-      .reduce((s, b) => s + b.total, 0);
-    roundingAdjustment = exactGrand - othersSum - peopleBreakdown[0].total;
-    peopleBreakdown[0].total += roundingAdjustment;
+    const absorber = Math.max(
+      0,
+      peopleBreakdown.findIndex((b) => b.subtotal > 0)
+    );
+    const sum = peopleBreakdown.reduce((s, b) => s + b.total, 0);
+    roundingAdjustment = exactGrand - sum;
+    peopleBreakdown[absorber].total += roundingAdjustment;
   }
 
   // The grand total is built from the rounded parts above, so the displayed
   // tax/service/tip always add up to the displayed total, and the per-person
-  // totals (with the first person absorbing the leftover) sum to it exactly.
+  // totals (with one diner absorbing the leftover) sum to it exactly.
   return {
     people: peopleBreakdown,
     itemsSubtotal,

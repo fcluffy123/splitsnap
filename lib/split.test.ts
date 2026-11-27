@@ -174,3 +174,26 @@ test("summary text warns when items are unassigned", () => {
   const text = buildSummaryText(r, "VND");
   assert.ok(text.includes("not assigned"), text);
 });
+
+test("rounding never charges or credits someone who ordered nothing", () => {
+  // Only Minh orders. $1.03 + 5% tax + 15% service: tax 0.0515 -> 0.05,
+  // service 0.1545 -> 0.15, so the bill is $1.23. Minh pays all of it and
+  // Lan (no items) pays exactly 0 — no -$0.01 credit.
+  const extras = { taxPercent: 5, servicePercent: 15, tipPercent: 0, tipFixed: 0 };
+  const items = [item("i1", "Tea", 1.03, 1, ["p2"])];
+  const r = splitBill([lan, minh], items, extras, 0.01);
+  assert.equal(r.people[0].total, 0);
+  assert.ok(Math.abs(r.people[1].total - 1.23) < 1e-9);
+  assert.ok(Math.abs(r.people[1].total - r.grandTotal) < 1e-9);
+});
+
+test("rounding leftover goes to a diner, not a non-diner listed first", () => {
+  // Lan orders nothing; Minh and Hoa split 1 cent (0.005 each, both round up).
+  // The -1 cent leftover must land on a diner, not on Lan.
+  const hoa: Person = { id: "p3", name: "Hoa", color: "#22c55e" };
+  const items = [item("i1", "Mint", 0.01, 1, ["p2", "p3"])];
+  const r = splitBill([lan, minh, hoa], items, noExtras, 0.01);
+  assert.equal(r.people[0].total, 0);
+  const sum = r.people.reduce((s, p) => s + p.total, 0);
+  assert.ok(Math.abs(sum - 0.01) < 1e-9);
+});
