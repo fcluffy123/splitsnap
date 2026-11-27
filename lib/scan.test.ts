@@ -32,15 +32,24 @@ test("rejects non-objects and missing items array", () => {
   assert.equal(validateScannedReceipt({ items: "nope" }), null);
 });
 
-test("rejects items without a name or with a negative price", () => {
+test("rejects items without a name; skips discount lines with negative price", () => {
   assert.equal(
     validateScannedReceipt({ items: [{ name: "", price: 1, qty: 1 }] }),
     null
   );
-  assert.equal(
-    validateScannedReceipt({ items: [{ name: "X", price: -5, qty: 1 }] }),
-    null
-  );
+  // A discount line (negative amount) is dropped, not fatal — the rest of
+  // the receipt still comes through.
+  const r = validateScannedReceipt({
+    items: [
+      { name: "X", price: -5, qty: 1 },
+      { name: "Pho", price: 85000, qty: 2 },
+    ],
+    subtotal: 170000,
+    total: 170000,
+    currency: "VND",
+  });
+  assert.ok(r);
+  assert.deepEqual(r.items, [{ name: "Pho", price: 85000, qty: 2 }]);
 });
 
 test("missing numbers become 0, missing currency becomes VND", () => {

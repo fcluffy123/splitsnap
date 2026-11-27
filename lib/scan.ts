@@ -33,7 +33,10 @@ export function validateScannedReceipt(data: unknown): ScannedReceipt | null {
     if (typeof raw !== "object" || raw === null) return null;
     const it = raw as Record<string, unknown>;
     if (typeof it.name !== "string" || !it.name.trim()) return null;
-    if (!isNum(it.price) || it.price < 0) return null;
+    // Discount lines come in with negative amounts (e.g. "Open Discount
+    // -74,001"). Dropping one shouldn't throw away the whole receipt —
+    // skip it and keep reading.
+    if (!isNum(it.price) || it.price < 0) continue;
     const qty = isNum(it.qty) ? Math.max(1, Math.floor(it.qty)) : 1;
     items.push({ name: it.name.trim(), price: it.price, qty });
   }

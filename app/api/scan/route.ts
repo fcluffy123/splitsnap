@@ -18,7 +18,14 @@ Rules:
 - qty is how many of that item were ordered; use 1 when the receipt doesn't say.
 - subtotal, tax, service, total are the amounts printed on the receipt (0 if absent).
 - currency is the ISO code shown on the receipt, e.g. "VND", "USD", "EUR".
-- If the photo is unreadable, return {"items":[],"subtotal":0,"tax":0,"service":0,"total":0,"currency":"VND"}.`;
+- The photo may be rotated, tilted, shadowed or low-quality: rotate it mentally and read carefully, line by line.
+- Do NOT list discount lines, taxes, service charges, payments or totals as items — items are the food/drinks only.
+- If the receipt has discount lines (e.g. "Open Discount"), do not include them in items; keep the printed subtotal/total as-is (if only a net "TOTAL AMOUNT" is printed, use it as total and leave subtotal 0).
+- Many receipts (e.g. Vietnamese) use dots or commas as thousands separators: "140,000" and "140.000" both mean 140000.
+- If the photo is truly unreadable, return {"items":[],"subtotal":0,"tax":0,"service":0,"total":0,"currency":"VND"}.`;
+
+// A second, more insistent pass used only when the first read came back empty.
+const RETRY_HINT = `The previous read found nothing. Look VERY carefully: the text may be rotated up to 180 degrees, in shadow, or small. Try reading it upside down or sideways. Extract any item lines you can find.`;
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -57,84 +64,105 @@ export async function POST(req: NextRequest) {
   const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
   const mimeType = file.type || "image/jpeg";
 
-  // Try the flash model first; on 503/429 (overload/rate limit) fall back to
-  // other flash variants so a busy moment doesn't break scanning.
-  const modelsToTry = [MODEL, ...FALLBACK_MODELS];
-  let geminiRes: Response | null = null;
-  let lastStatus = 0;
-  let lastDetail = "";
-  for (const model of modelsToTry) {
-    try {
-      geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { inline_data: { mime_type: mimeType, data: base64 } },
-                  { text: PROMPT },
-                ],
+  // One Gemini call: tries the flash model first, then fallbacks on
+  // 503/429 (overload/rate limit). thinkingBudget 0 skips the model's
+  // internal reasoning so scans come back faster.
+  const callGemini = async (
+    promptText: string
+  ): Promise<{ text: string } | { error: NextResponse }> => {
+    const modelsToTry = [MODEL, ...FALLBACK_MODELS];
+    let lastStatus = 0;
+    let lastDetail = "";
+    for (const model of modelsToTry) {
+      let geminiRes: Response;
+      try {
+        geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { inline_data: { mime_type: mimeType, data: base64 } },
+                    { text: promptText },
+                  ],
+                },
+              ],
+              generationConfig: {
+                response_mime_type: "application/json", // ask Gemini for raw JSON
+                temperature: 0, // deterministic reading
+                thinkingConfig: { thinkingBudget: 0 }, // no extra reasoning — faster scans
               },
-            ],
-            generationConfig: {
-              response_mime_type: "application/json", // ask Gemini for raw JSON
-              temperature: 0, // deterministic reading
-            },
-          }),
-        }
-      );
-    } catch {
-      return NextResponse.json(
-        { ok: false, error: "Could not reach the Gemini API. Check the server internet connection." },
-        { status: 502 }
-      );
+            }),
+          }
+        );
+      } catch {
+        return {
+          error: NextResponse.json(
+            { ok: false, error: "Could not reach the Gemini API. Check the server internet connection." },
+            { status: 502 }
+          ),
+        };
+      }
+      if (geminiRes.ok) {
+        const payload = await geminiRes.json();
+        const text: unknown = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (typeof text === "string") return { text };
+        // Shape problem — no point trying other models, they read the same image.
+        return {
+          error: NextResponse.json(
+            { ok: false, error: "Gemini returned no text." },
+            { status: 502 }
+          ),
+        };
+      }
+      lastStatus = geminiRes.status;
+      lastDetail = await geminiRes.text().catch(() => "");
+      console.error(`Gemini ${model} error`, lastStatus, lastDetail.slice(0, 300));
+      if (lastStatus !== 503 && lastStatus !== 429) break; // real errors (bad key etc.) — don't retry
     }
-    lastStatus = geminiRes.status;
-    if (geminiRes.ok) break;
-    lastDetail = await geminiRes.text().catch(() => "");
-    console.error(`Gemini ${model} error`, lastStatus, lastDetail.slice(0, 300));
-    if (lastStatus !== 503 && lastStatus !== 429) break; // real errors (bad key etc.) — don't retry
-  }
 
-  if (!geminiRes || !geminiRes.ok) {
     const hint =
       lastStatus === 400 || lastStatus === 403
         ? "Check that the API key in .env.local is correct and has the Gemini API enabled."
         : "Gemini is busy or the quota is exhausted. Try again in a moment.";
-    return NextResponse.json(
-      { ok: false, error: `Gemini API error (${lastStatus}). ${hint}` },
-      { status: 502 }
-    );
+    return {
+      error: NextResponse.json(
+        { ok: false, error: `Gemini API error (${lastStatus}). ${hint}` },
+        { status: 502 }
+      ),
+    };
+  };
+
+  // Parse a Gemini answer defensively into a receipt, or null if unusable.
+  const parseReceipt = (text: string): ScannedReceipt | null => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text.replace(/```(?:json)?/gi, "").trim());
+    } catch {
+      return null;
+    }
+    return validateScannedReceipt(parsed);
+  };
+
+  // First pass.
+  const first = await callGemini(PROMPT);
+  if ("error" in first) return first.error;
+  let receipt = parseReceipt(first.text);
+
+  // Second chance: a completely empty read (no items at all) usually means
+  // a hard photo — rotated, shadowed, blurry. One insistent retry, then give up.
+  if (!receipt || receipt.items.length === 0) {
+    const second = await callGemini(`${PROMPT}\n${RETRY_HINT}`);
+    if ("error" in second) return second.error;
+    receipt = parseReceipt(second.text);
   }
 
-  const payload = await geminiRes.json();
-  // The model's text answer is in candidates[0].content.parts[0].text
-  const text: unknown = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof text !== "string") {
-    return NextResponse.json(
-      { ok: false, error: "Gemini returned no text." },
-      { status: 502 }
-    );
-  }
-
-  // Parse defensively: strip any ```json fences just in case.
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text.replace(/```(?:json)?/gi, "").trim());
-  } catch {
-    return NextResponse.json(
-      { ok: false, error: "Gemini's answer was not valid JSON." },
-      { status: 502 }
-    );
-  }
-
-  const receipt: ScannedReceipt | null = validateScannedReceipt(parsed);
   if (!receipt) {
     return NextResponse.json(
-      { ok: false, error: "Gemini's answer had an unexpected shape." },
+      { ok: false, error: "Couldn't read that receipt clearly enough. Try a brighter, straighter photo." },
       { status: 502 }
     );
   }

@@ -2,11 +2,13 @@
 // Browser-only: shrink a receipt photo to under 1 MB before uploading,
 // so scanning is fast on mobile data. Not imported by the server.
 
-const MAX_BYTES = 1024 * 1024; // 1 MB
-const MAX_DIM = 1600; // receipts are text; 1600px on the long side is plenty for OCR
+const MAX_BYTES = 3 * 1024 * 1024; // 3 MB — Gemini handles this fine, and small text stays sharp
+const MAX_DIM = 2400; // tilted/curved receipts need resolution for OCR; 1600 was losing small lines
 
 export async function compressImageToBlob(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
+  // imageOrientation: "from-image" makes canvas draw respect EXIF rotation,
+  // so phone photos taken sideways come out upright.
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
 
   let width = bitmap.width;
   let height = bitmap.height;
