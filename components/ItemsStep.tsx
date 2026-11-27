@@ -11,12 +11,13 @@ type Props = {
   people: Person[];
   items: Item[];
   onChange: (items: Item[]) => void;
-  onScanned: (receipt: ScannedReceipt) => void;
+  onScanned: (receipt: ScannedReceipt, startedBillVersion: number) => void;
+  getBillVersion: () => number;
   scanCheck: { scannedTotal: number; itemsTotal: number } | null;
   onScanCheck: (check: { scannedTotal: number; itemsTotal: number } | null) => void;
 };
 
-export default function ItemsStep({ people, items, onChange, onScanned, scanCheck, onScanCheck }: Props) {
+export default function ItemsStep({ people, items, onChange, onScanned, getBillVersion, scanCheck, onScanCheck }: Props) {
   // The scanned receipt is handed up to the page (which owns the state and
   // guards against scans finishing after a "New bill" reset).
 
@@ -47,7 +48,7 @@ export default function ItemsStep({ people, items, onChange, onScanned, scanChec
     <div className="space-y-4">
       <p className="text-stone-600">Add each item, then tap who had it.</p>
 
-      <ScanButton onScanned={onScanned} />
+      <ScanButton onScanned={onScanned} getBillVersion={getBillVersion} />
 
       {/* Sanity check: does the scanned bill total match the sum of scanned items? */}
       {scanCheck && (

@@ -9,16 +9,21 @@ import { compressImageToBlob } from "@/lib/compressImage";
 import type { ScannedReceipt } from "@/lib/scan";
 
 type Props = {
-  onScanned: (receipt: ScannedReceipt) => void;
+  onScanned: (receipt: ScannedReceipt, startedBillVersion: number) => void;
+  // Reads the bill's current version so the scan remembers which bill it
+  // started on — a receipt delivered after a "New bill" reset is then
+  // recognised as stale and ignored by the page.
+  getBillVersion: () => number;
 };
 
-export default function ScanButton({ onScanned }: Props) {
+export default function ScanButton({ onScanned, getBillVersion }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
+    const startedBillVersion = getBillVersion(); // version at scan START
     setBusy(true);
     setError(null);
     try {
@@ -44,7 +49,7 @@ export default function ScanButton({ onScanned }: Props) {
         );
         return;
       }
-      onScanned(data.receipt as ScannedReceipt);
+      onScanned(data.receipt as ScannedReceipt, startedBillVersion);
     } catch (e) {
       setError(
         e instanceof DOMException && e.name === "AbortError"

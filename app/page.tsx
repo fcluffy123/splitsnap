@@ -106,13 +106,13 @@ export default function Home() {
     localStorage.removeItem(STORAGE_KEY);
   };
 
-  // Receives a scanned receipt. Uses functional updates + the bill version so
-  // a scan that finishes AFTER "New bill" was pressed is ignored — otherwise
-  // the old receipt's items would be written into the freshly cleared bill.
-  const handleScanned = (receipt: ScannedReceipt) => {
-    const version = billVersionRef.current;
+  // Receives a scanned receipt. The version recorded when the scan STARTED
+  // is compared against the bill's current version, so a scan that finishes
+  // AFTER "New bill" was pressed is ignored — otherwise the old receipt's
+  // items would be written into the freshly cleared bill.
+  const handleScanned = (receipt: ScannedReceipt, startedVersion: number) => {
     setItems((prev) => {
-      if (billVersionRef.current !== version) return prev; // bill was reset meanwhile
+      if (billVersionRef.current !== startedVersion) return prev; // bill was reset since the scan started
       const scanned: Item[] = receipt.items.map((it, i) => ({
         id: `s${Date.now()}${i}`,
         name: it.name,
@@ -123,7 +123,7 @@ export default function Home() {
       return [...prev, ...scanned];
     });
     setScanCheck(() => {
-      if (billVersionRef.current !== version) return null; // bill was reset meanwhile
+      if (billVersionRef.current !== startedVersion) return null; // bill was reset since the scan started
       const itemsTotal = receipt.items.reduce((s, it) => s + it.price * it.qty, 0);
       return { scannedTotal: receipt.total, itemsTotal };
     });
@@ -183,6 +183,7 @@ export default function Home() {
           items={items}
           onChange={setItems}
           onScanned={handleScanned}
+          getBillVersion={() => billVersionRef.current}
           scanCheck={scanCheck}
           onScanCheck={setScanCheck}
         />
