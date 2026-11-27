@@ -107,26 +107,21 @@ export default function Home() {
   };
 
   // Receives a scanned receipt. The version recorded when the scan STARTED
-  // is compared against the bill's current version, so a scan that finishes
-  // AFTER "New bill" was pressed is ignored — otherwise the old receipt's
-  // items would be written into the freshly cleared bill.
+  // is compared against the bill's current version; if the bill was reset
+  // (or another, newer scan has taken over) the stale receipt is dropped
+  // entirely — it must not clear a newer receipt's saved total check.
   const handleScanned = (receipt: ScannedReceipt, startedVersion: number) => {
-    setItems((prev) => {
-      if (billVersionRef.current !== startedVersion) return prev; // bill was reset since the scan started
-      const scanned: Item[] = receipt.items.map((it, i) => ({
-        id: `s${Date.now()}${i}`,
-        name: it.name,
-        price: it.price,
-        qty: it.qty,
-        assignedTo: [],
-      }));
-      return [...prev, ...scanned];
-    });
-    setScanCheck(() => {
-      if (billVersionRef.current !== startedVersion) return null; // bill was reset since the scan started
-      const itemsTotal = receipt.items.reduce((s, it) => s + it.price * it.qty, 0);
-      return { scannedTotal: receipt.total, itemsTotal };
-    });
+    if (billVersionRef.current !== startedVersion) return; // bill changed since the scan started
+    const scanned: Item[] = receipt.items.map((it, i) => ({
+      id: `s${Date.now()}${i}`,
+      name: it.name,
+      price: it.price,
+      qty: it.qty,
+      assignedTo: [],
+    }));
+    setItems((prev) => [...prev, ...scanned]);
+    const itemsTotal = receipt.items.reduce((s, it) => s + it.price * it.qty, 0);
+    setScanCheck({ scannedTotal: receipt.total, itemsTotal });
   };
 
   if (!hydrated) return null; // avoid flashing empty state before localStorage loads
