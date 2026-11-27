@@ -153,6 +153,21 @@ test("grand total rounds half-cents up (no float drift)", () => {
   assert.equal(r.tax, 1.28); // displayed parts must add up to the total
 });
 
+test("rounded tax/service parts sum to the displayed grand total", () => {
+  // $16.90 + 5% tax + 15% service. Each extra rounds up on its own
+  // (0.845 -> 0.85, 2.535 -> 2.54), so the total must be built from the
+  // rounded parts ($20.29), not rounded independently ($20.28) — otherwise
+  // the Results screen shows parts that don't add up to the total.
+  const extras = { taxPercent: 5, servicePercent: 15, tipPercent: 0, tipFixed: 0 };
+  const items = [item("i1", "Dinner", 16.9, 1, ["p1", "p2"])];
+  const r = splitBill([lan, minh], items, extras, 0.01);
+  assert.equal(r.tax, 0.85);
+  assert.equal(r.service, 2.54);
+  assert.equal(r.grandTotal, 16.9 + 0.85 + 2.54);
+  const sharesSum = r.people.reduce((s, b) => s + b.total, 0);
+  assert.equal(sharesSum, r.grandTotal); // shares and total still agree
+});
+
 test("summary text warns when items are unassigned", () => {
   const items = [item("i1", "Mystery", 100000, 1, [])]; // no one assigned
   const r = splitBill([lan], items, noExtras);

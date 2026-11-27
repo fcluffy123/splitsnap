@@ -116,9 +116,19 @@ export function splitBill(
     extras.tipFixed > 0
       ? extras.tipFixed
       : (itemsSubtotal * extras.tipPercent) / 100;
-  const grandTotal = itemsSubtotal + tax + service + tip;
 
   const r = (n: number) => roundMoney(n, smallestUnit);
+
+  // Round the extras FIRST, then build the grand total from the rounded
+  // parts. Rounding the total independently would let the displayed
+  // tax/service/tip sum disagree with the displayed total by 1 unit
+  // (e.g. $16.90 + 5% + 15% shows $0.85 + $2.54 = $20.29 but total $20.28).
+  const rTax = r(tax);
+  const rService = r(service);
+  const rTip = r(tip);
+  const exactGrand = itemsSubtotal + rTax + rService + rTip;
+
+  // Raw (unrounded) extras total, used to weight each person's share.
   const extrasTotal = tax + service + tip;
 
   // Raw (unrounded) total per person: subtotal + proportional extras.
@@ -152,22 +162,20 @@ export function splitBill(
     const othersSum = peopleBreakdown
       .slice(1)
       .reduce((s, b) => s + b.total, 0);
-    const exactGrand = r(grandTotal);
     roundingAdjustment = exactGrand - othersSum - peopleBreakdown[0].total;
     peopleBreakdown[0].total += roundingAdjustment;
   }
 
-  // Round the grand total so it matches what the per-person shares sum to
-  // (the first person absorbs the leftover below). Tax/service/tip are also
-  // rounded so the displayed parts add up to the displayed total. Consumers
-  // — the Results screen and the copy summary — must never see raw values.
+  // The grand total is built from the rounded parts above, so the displayed
+  // tax/service/tip always add up to the displayed total, and the per-person
+  // totals (with the first person absorbing the leftover) sum to it exactly.
   return {
     people: peopleBreakdown,
     itemsSubtotal,
-    tax: r(tax),
-    service: r(service),
-    tip: r(tip),
-    grandTotal: r(grandTotal),
+    tax: rTax,
+    service: rService,
+    tip: rTip,
+    grandTotal: exactGrand,
     unassignedItemIds,
     roundingAdjustment,
   };
