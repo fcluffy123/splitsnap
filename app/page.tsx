@@ -190,7 +190,10 @@ export default function Home() {
     const discount = receipt.discount > 0 ? receipt.discount : 0;
     const merged: Extras = {
       ...extras,
-      taxPercent,
+      // "Total (+VAT)" receipts: tax is already inside the prices, so tax 0%
+      // and remember that the prices include tax.
+      taxPercent: receipt.taxIncluded ? 0 : taxPercent,
+      pricesIncludeTax: receipt.taxIncluded || extras.pricesIncludeTax,
       servicePercent,
       discountType: "fixed",
       discountValue: discount,

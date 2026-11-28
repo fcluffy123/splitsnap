@@ -36,19 +36,21 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-const PROMPT = `You are reading a restaurant receipt photo. Return ONLY a JSON object — no markdown, no code fences, no explanation — in exactly this shape:
-{"items":[{"name":"string","price":number,"qty":number}],"subtotal":number,"discount":number,"tax":number,"service":number,"total":number,"currency":"string"}
+const PROMPT = `You are reading a retail/restaurant receipt photo. Return ONLY a JSON object — no markdown, no code fences, no explanation — in exactly this shape:
+{"items":[{"name":"string","qty":number,"lineTotal":number,"discount":number,"netTotal":number}],"subtotal":number,"totalDiscount":number,"tax":number,"service":number,"total":number,"currency":"string","taxIncluded":boolean}
 Rules:
-- price is the UNIT price of one item, in the receipt's currency (e.g. 85000 for 85.000đ).
-- qty is how many of that item were ordered; use 1 when the receipt doesn't say.
-- subtotal, tax, service, total are the amounts printed on the receipt (0 if absent).
-- discount is the total discount amount printed on the receipt, as a POSITIVE number (0 if there is none).
+- For EACH item return: name, qty, lineTotal (the printed amount BEFORE any promo), discount (a POSITIVE number, 0 if none), and netTotal = lineTotal - discount.
+- PROMO LINES UNDER AN ITEM: a line with a negative amount right under an item (e.g. "Buy 1 get 1 free -14,000", "Tiet kiem 2K -4,000", "Mua 1 tang 1 -15,000", "Discount: -9,000") is a promo for the item ABOVE it. NEVER return it as its own item — subtract it from that item's discount so netTotal is the discounted amount.
+- Promo lines often also show a unit price of 0 and a qty. IGNORE those numbers — only the negative amount matters.
+- WRAPPED ITEMS: item names can wrap across lines — the name is on one line and the unit price, qty and amount are on the next. Join them into ONE item.
+- IGNORE payment/total lines: E-Voucher, Voucher Code, Cash, Change Due, card payments, SUBTOTAL, TOTAL, VAT lines. Never list them as items.
+- TAX: "Total (+VAT)" or "VAT included" means tax is already inside the prices — return tax 0 and set "taxIncluded": true. Otherwise tax is the printed tax amount (0 if absent) and taxIncluded is false.
+- totalDiscount is the total of all promo/discount amounts on the receipt, as a POSITIVE number (0 if none).
+- subtotal, total are the amounts printed on the receipt (0 if absent).
 - currency is the ISO code shown on the receipt, e.g. "VND", "USD", "EUR".
 - The photo may be rotated, tilted, shadowed or low-quality: rotate it mentally and read carefully, line by line.
-- Do NOT list discount lines, taxes, service charges, payments or totals as items — items are the food/drinks only.
-- If the receipt has discount lines (e.g. "Open Discount -74,001"), do not include them in items; add their amount into discount as a positive number. Keep the printed subtotal/total as-is (if only a net "TOTAL AMOUNT" is printed, use it as total and leave subtotal 0).
 - Many receipts (e.g. Vietnamese) use dots or commas as thousands separators: "140,000" and "140.000" both mean 140000.
-- If the photo is truly unreadable, return {"items":[],"subtotal":0,"discount":0,"tax":0,"service":0,"total":0,"currency":"VND"}.`;
+- If the photo is truly unreadable, return {"items":[],"subtotal":0,"totalDiscount":0,"tax":0,"service":0,"total":0,"currency":"VND","taxIncluded":false}.`;
 
 // A second, more insistent pass used only when the first read came back empty.
 const RETRY_HINT = `The previous read found nothing. Look VERY carefully: the text may be rotated up to 180 degrees, in shadow, or small. Try reading it upside down or sideways. Extract any item lines you can find.`;
